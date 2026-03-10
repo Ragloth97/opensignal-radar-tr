@@ -133,19 +133,47 @@ def reset_ollama_cache():
     return {"success": True, "available": ollama.is_available()}
 
 
+def _log_pipeline_result(db, event_type: str, new_articles: int, new_signals: int):
+    """Pipeline sonucunu SystemLog'a kaydet."""
+    from backend.db.models import SystemLog
+    log = SystemLog(
+        event_type=event_type,
+        level="INFO",
+        message=f"{new_articles} makale, {new_signals} yeni sinyal",
+        details={"new_articles": new_articles, "new_signals": new_signals},
+        created_at=datetime.utcnow(),
+    )
+    db.add(log)
+    db.commit()
+
+
 def _run_full_pipeline():
     """Background: ingest + process."""
     from backend.db.database import SessionLocal
     from backend.ingestion.orchestrator import IngestionOrchestrator
     from backend.signals.processor import SignalProcessor
+    from sqlalchemy import func
+    from backend.db.models import Article, Signal
 
     db = SessionLocal()
     try:
+        articles_before = db.query(func.count(Article.id)).scalar()
+        signals_before = db.query(func.count(Signal.id)).scalar()
+
         orchestrator = IngestionOrchestrator(db)
         orchestrator.run_all()
 
         processor = SignalProcessor(db)
         processor.process_pending_articles(limit=200)
+
+        articles_after = db.query(func.count(Article.id)).scalar()
+        signals_after = db.query(func.count(Signal.id)).scalar()
+
+        _log_pipeline_result(
+            db, "ingestion_run",
+            new_articles=articles_after - articles_before,
+            new_signals=signals_after - signals_before,
+        )
     finally:
         db.close()
 
@@ -154,10 +182,22 @@ def _run_processing_only():
     """Background: sadece sinyal işleme."""
     from backend.db.database import SessionLocal
     from backend.signals.processor import SignalProcessor
+    from sqlalchemy import func
+    from backend.db.models import Signal
 
     db = SessionLocal()
     try:
+        signals_before = db.query(func.count(Signal.id)).scalar()
+
         processor = SignalProcessor(db)
         processor.process_pending_articles(limit=200)
+
+        signals_after = db.query(func.count(Signal.id)).scalar()
+
+        _log_pipeline_result(
+            db, "processing_run",
+            new_articles=0,
+            new_signals=signals_after - signals_before,
+        )
     finally:
         db.close()

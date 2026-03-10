@@ -352,6 +352,16 @@ class RulesBasedDetector:
         amount: Optional[str] = None,
     ) -> str:
         """Kural tabanlı Türkçe özet — AI yokken devreye girer."""
+        INDUSTRY_TR = {
+            "yari_iletken": "Yarı İletken", "enerji": "Enerji",
+            "veri_merkezi": "Veri Merkezi", "otomotiv": "Otomotiv",
+            "lojistik": "Lojistik", "madencilik": "Madencilik",
+            "uretim": "Üretim", "savunma": "Savunma",
+            "insaat": "İnşaat", "finans": "Finans",
+            "teknoloji": "Teknoloji", "tarim": "Tarım",
+            "saglik": "Sağlık", "perakende": "Perakende",
+            "telekom": "Telekom", "diger": "Diğer",
+        }
         action_map = {
             SignalType.NEW_FACILITY: "yeni tesis kuruyor",
             SignalType.EXPANSION: "kapasitesini artırıyor",
@@ -373,22 +383,20 @@ class RulesBasedDetector:
         }
         action = action_map.get(signal_type, "stratejik adım attı")
 
-        # Özne: şirket varsa kullan, yoksa sektör/ülke
-        subject = company or (f"{industry} sektörü" if industry else None) or "Bir şirket"
+        # Sektör değerini okunabilir Türkçeye çevir
+        industry_label = INDUSTRY_TR.get(industry, "") if industry else ""
 
-        # Lokasyon
+        # Özne: şirket varsa kullan, yoksa sektör adı
+        subject = company or (f"{industry_label} sektörü" if industry_label else "Bir şirket")
+
         location_str = f", {country}" if country else ""
-
-        # Yatırım miktarı
         amount_str = f" ({amount})" if amount else ""
 
-        # Ana cümle
         sentence = f"{subject}{location_str} {action}{amount_str}."
 
-        # Eğer kanıt cümlesi varsa kısa bir ek ekle
+        # Kanıt cümlesi varsa ekle (yalnızca Türkçe/okunabilir olanı)
         if evidence:
             best = evidence[0]
-            # 150 karakterden uzunsa kırp
             if len(best) > 150:
                 best = best[:147] + "..."
             return f"{sentence} {best}"

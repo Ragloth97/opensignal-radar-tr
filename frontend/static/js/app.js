@@ -73,9 +73,10 @@ const Toast = {
     }, duration);
   },
 
-  success(msg) { this.show(msg, 'success'); },
-  error(msg) { this.show(msg, 'error', 5000); },
-  info(msg) { this.show(msg, 'info'); },
+  success(msg, duration) { this.show(msg, 'success', duration || 3500); },
+  error(msg, duration) { this.show(msg, 'error', duration || 5000); },
+  info(msg, duration) { this.show(msg, 'info', duration || 3500); },
+  warning(msg, duration) { this.show(msg, 'warning', duration || 5000); },
 };
 
 // ── Score Utilities ─────────────────────────────────────────────────────────

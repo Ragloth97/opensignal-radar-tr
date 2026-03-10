@@ -180,17 +180,47 @@ async function loadLogs() {
   } catch(e) {}
 }
 
+async function pollUntilDone(startedAt, label) {
+  const maxWait = 5 * 60 * 1000; // 5 dakika timeout
+  const interval = 6000;
+  const deadline = Date.now() + maxWait;
+  Toast.info(`${label} başlatıldı — tamamlanınca bildirim gelecek`);
+
+  return new Promise((resolve) => {
+    const timer = setInterval(async () => {
+      try {
+        const status = await API.get('/api/system/status');
+        const lastAt = status.last_ingestion?.at;
+        if (lastAt && new Date(lastAt) >= new Date(startedAt)) {
+          clearInterval(timer);
+          const msg = status.last_ingestion.summary || '';
+          Toast.success(`✓ Tamamlandı: ${msg}`, 8000);
+          loadSystemStatus();
+          resolve();
+        }
+      } catch(_) {}
+      if (Date.now() >= deadline) {
+        clearInterval(timer);
+        Toast.warning('Tarama süresi aşıldı, sonuçları kontrol edin.');
+        resolve();
+      }
+    }, interval);
+  });
+}
+
 async function runPipeline() {
   try {
+    const startedAt = new Date().toISOString();
     await API.post('/api/system/run-ingestion');
-    Toast.success('Tam pipeline başlatıldı');
+    pollUntilDone(startedAt, 'Veri toplama');
   } catch(e) { Toast.error('Başlatılamadı'); }
 }
 
 async function runProcessing() {
   try {
+    const startedAt = new Date().toISOString();
     await API.post('/api/system/run-processing');
-    Toast.success('Sinyal işleme başlatıldı');
+    pollUntilDone(startedAt, 'Sinyal işleme');
   } catch(e) { Toast.error('Başlatılamadı'); }
 }
 
