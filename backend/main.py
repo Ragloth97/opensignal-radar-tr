@@ -15,7 +15,7 @@ from backend.core.logging import logger
 from backend.db.database import init_db
 
 # Route'ları import et
-from backend.api.routes import signals, sources, trends, deck, system, export
+from backend.api.routes import signals, sources, trends, deck, system, export, watchlist, report
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "frontend" / "templates"
@@ -73,6 +73,8 @@ app.include_router(trends.router)
 app.include_router(deck.router)
 app.include_router(system.router)
 app.include_router(export.router)
+app.include_router(watchlist.router)
+app.include_router(report.router)
 
 
 # ─── Frontend Sayfaları ──────────────────────────────────────────────────────
@@ -118,3 +120,13 @@ async def deck_page(request: Request):
 @app.get("/ayarlar", response_class=HTMLResponse)
 async def settings_page(request: Request):
     return templates.TemplateResponse("pages/settings.html", {"request": request})
+
+
+@app.get("/takip", response_class=HTMLResponse)
+async def watchlist_page(request: Request):
+    return templates.TemplateResponse("pages/watchlist.html", {"request": request})
+
+
+@app.get("/rapor", response_class=HTMLResponse)
+async def report_page(request: Request):
+    return templates.TemplateResponse("pages/report.html", {"request": request})

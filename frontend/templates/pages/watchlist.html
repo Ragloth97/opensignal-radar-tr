@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+{% block title %}Takip Listesi — TRENG İstihbarat{% endblock %}
+
+{% block content %}
+<style>
+.wl-toolbar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.wl-filter-btn { padding:6px 14px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text-muted); font-size:13px; cursor:pointer; transition:.15s; }
+.wl-filter-btn.active, .wl-filter-btn:hover { background:var(--accent); color:#fff; border-color:var(--accent); }
+.badge-treng { background:rgba(59,130,246,.18); color:#60a5fa; }
+.badge-irda  { background:rgba(168,85,247,.18); color:#c084fc; }
+.badge-both  { background:rgba(16,185,129,.15); color:#34d399; }
+.priority-high   { color:#f87171; }
+.priority-medium { color:#fbbf24; }
+.priority-low    { color:var(--text-muted); }
+.wl-table { width:100%; border-collapse:collapse; }
+.wl-table th { text-align:left; padding:10px 12px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); border-bottom:1px solid var(--border); }
+.wl-table td { padding:12px; border-bottom:1px solid var(--border-subtle); font-size:13px; vertical-align:top; }
+.wl-table tr:hover td { background:rgba(255,255,255,.02); }
+.upload-zone { border:2px dashed var(--border); border-radius:12px; padding:32px; text-align:center; cursor:pointer; transition:.2s; }
+.upload-zone:hover { border-color:var(--accent); background:rgba(99,102,241,.05); }
+.add-form { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.alias-input { font-size:12px; color:var(--text-muted); }
+</style>
+
+<div class="page-actions">
+  <button class="btn btn-primary" onclick="openAddModal()">+ Şirket Ekle</button>
+  <button class="btn" onclick="openUploadModal()">↑ CSV / XLSX Yükle</button>
+  <a class="btn" href="/api/watchlist/export/csv" download>↓ Dışa Aktar</a>
+</div>
+
+<!-- Filtreler -->
+<div class="wl-toolbar" style="margin-bottom:16px">
+  <button class="wl-filter-btn active" onclick="setFilter('all', this)">Tümü</button>
+  <button class="wl-filter-btn" onclick="setFilter('treng', this)">🔧 TRENG</button>
+  <button class="wl-filter-btn" onclick="setFilter('irda', this)">🏗️ İRDA</button>
+  <button class="wl-filter-btn" onclick="setFilter('both', this)">Her İkisi</button>
+  <input type="search" id="wl-search" placeholder="Ara..." oninput="filterTable()"
+    style="margin-left:auto;padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;width:200px">
+</div>
+
+<!-- Tablo -->
+<div class="card" style="padding:0;overflow:hidden">
+  <table class="wl-table" id="wl-table">
+    <thead>
+      <tr>
+        <th>Şirket Adı</th>
+        <th>Sektör</th>
+        <th>Lokasyon</th>
+        <th>Kapsam</th>
+        <th>Öncelik</th>
+        <th>Notlar</th>
+        <th style="width:80px"></th>
+      </tr>
+    </thead>
+    <tbody id="wl-body">
+      <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:40px">Yükleniyor...</td></tr>
+    </tbody>
+  </table>
+</div>
+<div id="wl-count" style="font-size:12px;color:var(--text-muted);margin-top:8px"></div>
+
+<!-- Şirket Ekle Modal -->
+<div class="modal-overlay" id="add-modal" style="display:none" onclick="if(event.target===this)closeAddModal()">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header"><h3>Şirket Ekle</h3><button class="modal-close" onclick="closeAddModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="add-form">
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Şirket Adı *</label>
+          <input id="f-name" type="text" class="form-input" placeholder="Örn: Ford Otosan A.Ş.">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Alternatif İsimler <span style="color:var(--text-muted)">(| ile ayırın)</span></label>
+          <input id="f-aliases" type="text" class="form-input alias-input" placeholder="Ford | Ford Otosan | Ford Kocaeli">
+        </div>
+        <div class="form-group">
+          <label>Sektör</label>
+          <input id="f-sector" type="text" class="form-input" placeholder="Otomotiv">
+        </div>
+        <div class="form-group">
+          <label>Lokasyon</label>
+          <input id="f-location" type="text" class="form-input" placeholder="Kocaeli">
+        </div>
+        <div class="form-group">
+          <label>Kapsam</label>
+          <select id="f-owner" class="form-input">
+            <option value="both">Her İkisi (TRENG + İRDA)</option>
+            <option value="treng">🔧 TRENG</option>
+            <option value="irda">🏗️ İRDA</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Öncelik</label>
+          <select id="f-priority" class="form-input">
+            <option value="high">Yüksek</option>
+            <option value="medium" selected>Orta</option>
+            <option value="low">Düşük</option>
+          </select>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Notlar</label>
+          <textarea id="f-notes" class="form-input" rows="2" placeholder="Neden takip ediyoruz?"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeAddModal()">İptal</button>
+      <button class="btn btn-primary" onclick="addCompany()">Ekle</button>
+    </div>
+  </div>
+</div>
+
+<!-- CSV Yükleme Modal -->
+<div class="modal-overlay" id="upload-modal" style="display:none" onclick="if(event.target===this)closeUploadModal()">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header"><h3>CSV / XLSX Yükle</h3><button class="modal-close" onclick="closeUploadModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('csv-file').click()">
+        <div style="font-size:32px;margin-bottom:8px">📄</div>
+        <div style="font-weight:600;margin-bottom:4px">CSV veya XLSX dosyası seçin</div>
+        <div style="font-size:12px;color:var(--text-muted)">
+          Zorunlu kolon: <code>company_name</code><br>
+          İsteğe bağlı: <code>brand_aliases | sector | location | notes | priority | owner_company</code>
+        </div>
+        <input type="file" id="csv-file" accept=".csv,.xlsx,.xls" style="display:none" onchange="handleFileSelect(this)">
+      </div>
+      <div id="upload-preview" style="margin-top:12px;display:none">
+        <div style="font-size:13px;color:var(--text-muted)" id="upload-preview-text"></div>
+      </div>
+      <div style="margin-top:16px;padding:12px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--text-muted)">
+        <strong>owner_company değerleri:</strong> treng / irda / both<br>
+        <strong>priority değerleri:</strong> high / medium / low<br>
+        <strong>brand_aliases:</strong> Boru karakteriyle ayırın — Ford|Ford Otosan
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeUploadModal()">İptal</button>
+      <button class="btn btn-primary" id="upload-btn" onclick="uploadFile()" disabled>Yükle</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let allCompanies = [];
+let currentFilter = 'all';
+let selectedFile = null;
+
+async function loadCompanies() {
+  try {
+    const data = await API.get('/api/watchlist?active_only=false');
+    allCompanies = data.companies || [];
+    renderTable(allCompanies);
+  } catch(e) {
+    document.getElementById('wl-body').innerHTML =
+      '<tr><td colspan="7" style="text-align:center;color:var(--red);padding:40px">Yüklenemedi.</td></tr>';
+  }
+}
+
+function renderTable(companies) {
+  const ownerLabels = {
+    treng: '<span class="tag badge-treng">🔧 TRENG</span>',
+    irda: '<span class="tag badge-irda">🏗️ İRDA</span>',
+    both: '<span class="tag badge-both">Her İkisi</span>',
+  };
+  const prioLabels = {
+    high: '<span class="priority-high">● Yüksek</span>',
+    medium: '<span class="priority-medium">● Orta</span>',
+    low: '<span class="priority-low">● Düşük</span>',
+  };
+
+  const body = document.getElementById('wl-body');
+  if (!companies.length) {
+    body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:40px">Henüz şirket eklenmedi.</td></tr>';
+    document.getElementById('wl-count').textContent = '';
+    return;
+  }
+
+  body.innerHTML = companies.map(c => `
+    <tr data-owner="${c.owner_company}" data-name="${(c.name||'').toLowerCase()}">
+      <td>
+        <div style="font-weight:500">${escHtml(c.name)}</div>
+        ${c.aliases?.length ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">${escHtml(c.aliases.join(' · '))}</div>` : ''}
+        ${!c.is_active ? '<span class="tag" style="font-size:10px;opacity:.5">Pasif</span>' : ''}
+      </td>
+      <td>${escHtml(c.sector || '—')}</td>
+      <td>${escHtml(c.location || '—')}</td>
+      <td>${ownerLabels[c.owner_company] || c.owner_company}</td>
+      <td>${prioLabels[c.priority] || c.priority}</td>
+      <td style="font-size:12px;color:var(--text-muted);max-width:200px">${escHtml(c.notes || '—')}</td>
+      <td>
+        <button class="btn" style="font-size:11px;padding:4px 8px;color:var(--red)" onclick="deleteCompany(${c.id}, '${escHtml(c.name)}')">Sil</button>
+      </td>
+    </tr>
+  `).join('');
+
+  document.getElementById('wl-count').textContent = `${companies.length} şirket listeleniyor`;
+}
+
+function setFilter(owner, btn) {
+  currentFilter = owner;
+  document.querySelectorAll('.wl-filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  filterTable();
+}
+
+function filterTable() {
+  const q = (document.getElementById('wl-search').value || '').toLowerCase();
+  const filtered = allCompanies.filter(c => {
+    const ownerMatch = currentFilter === 'all' || c.owner_company === currentFilter || c.owner_company === 'both';
+    const nameMatch = !q || (c.name||'').toLowerCase().includes(q) ||
+      (c.sector||'').toLowerCase().includes(q) ||
+      (c.location||'').toLowerCase().includes(q);
+    return ownerMatch && nameMatch;
+  });
+  renderTable(filtered);
+}
+
+async function addCompany() {
+  const name = document.getElementById('f-name').value.trim();
+  if (!name) { Toast.error('Şirket adı zorunludur.'); return; }
+
+  const aliasRaw = document.getElementById('f-aliases').value;
+  const aliases = aliasRaw ? aliasRaw.split('|').map(a => a.trim()).filter(Boolean) : [];
+
+  try {
+    await API.post('/api/watchlist', {
+      name,
+      aliases,
+      sector: document.getElementById('f-sector').value.trim() || null,
+      location: document.getElementById('f-location').value.trim() || null,
+      notes: document.getElementById('f-notes').value.trim() || null,
+      priority: document.getElementById('f-priority').value,
+      owner_company: document.getElementById('f-owner').value,
+    });
+    Toast.success(`"${name}" takip listesine eklendi.`);
+    closeAddModal();
+    loadCompanies();
+  } catch(e) {
+    Toast.error('Eklenemedi: ' + (e.message || 'Hata'));
+  }
+}
+
+async function deleteCompany(id, name) {
+  if (!confirm(`"${name}" takip listesinden silinsin mi?`)) return;
+  try {
+    await API.delete(`/api/watchlist/${id}`);
+    Toast.info(`"${name}" silindi.`);
+    loadCompanies();
+  } catch(e) { Toast.error('Silinemedi.'); }
+}
+
+function openAddModal() {
+  ['f-name','f-aliases','f-sector','f-location','f-notes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('add-modal').style.display = 'flex';
+}
+function closeAddModal() { document.getElementById('add-modal').style.display = 'none'; }
+
+function openUploadModal() {
+  selectedFile = null;
+  document.getElementById('upload-btn').disabled = true;
+  document.getElementById('upload-preview').style.display = 'none';
+  document.getElementById('csv-file').value = '';
+  document.getElementById('upload-modal').style.display = 'flex';
+}
+function closeUploadModal() { document.getElementById('upload-modal').style.display = 'none'; }
+
+function handleFileSelect(input) {
+  selectedFile = input.files[0];
+  if (!selectedFile) return;
+  document.getElementById('upload-preview-text').textContent = `Seçilen: ${selectedFile.name} (${(selectedFile.size/1024).toFixed(1)} KB)`;
+  document.getElementById('upload-preview').style.display = 'block';
+  document.getElementById('upload-btn').disabled = false;
+}
+
+async function uploadFile() {
+  if (!selectedFile) return;
+  const btn = document.getElementById('upload-btn');
+  btn.disabled = true;
+  btn.textContent = 'Yükleniyor...';
+
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+
+  try {
+    const resp = await fetch('/api/watchlist/upload', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (data.success) {
+      Toast.success(`${data.added} şirket eklendi, ${data.skipped} atlandı.`, 6000);
+      closeUploadModal();
+      loadCompanies();
+    } else {
+      Toast.error('Yükleme başarısız.');
+    }
+  } catch(e) {
+    Toast.error('Yükleme hatası.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Yükle';
+  }
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+loadCompanies();
+</script>
+{% endblock %}

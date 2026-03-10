@@ -167,6 +167,13 @@ class Signal(Base):
     # Bileşik skor - sıralama için
     composite_score = Column(Float, default=0.0, index=True)
 
+    # TRENG & İRDA skorları (0-100)
+    treng_score = Column(Float, default=0.0, index=True)
+    irda_score = Column(Float, default=0.0, index=True)
+
+    # Takip listesiyle eşleşen şirketler
+    matched_watchlist = Column(JSON, nullable=True)  # [{"id": 1, "name": "..."}]
+
     # Tekilleştirme
     duplicate_group_id = Column(String(64), nullable=True, index=True)
     is_duplicate = Column(Boolean, default=False, index=True)
@@ -191,6 +198,8 @@ class Signal(Base):
         Index("ix_signals_composite", "composite_score", "created_at"),
         Index("ix_signals_industry_type", "industry", "signal_type"),
         Index("ix_signals_country_date", "country", "created_at"),
+        Index("ix_signals_treng", "treng_score", "created_at"),
+        Index("ix_signals_irda", "irda_score", "created_at"),
     )
 
     def __repr__(self):
@@ -261,3 +270,28 @@ class AppSettings(Base):
     value = Column(Text, nullable=True)
     description = Column(String(500), nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class WatchListCompany(Base):
+    """
+    Takip edilen şirketler.
+    TRENG / İRDA için önem taşıyan firmaların listesi.
+    CSV veya elle eklenir.
+    """
+    __tablename__ = "watchlist_companies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(300), nullable=False, index=True)       # Normalize edilmiş ad
+    raw_name = Column(String(300), nullable=True)                # Orijinal CSV'deki ad
+    aliases = Column(JSON, default=list)                         # Alternatif isimler
+    sector = Column(String(200), nullable=True)
+    location = Column(String(200), nullable=True)
+    notes = Column(Text, nullable=True)
+    priority = Column(String(20), default="medium")              # high / medium / low
+    owner_company = Column(String(20), default="both")           # treng / irda / both
+    is_active = Column(Boolean, default=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<WatchListCompany {self.name} [{self.owner_company}]>"

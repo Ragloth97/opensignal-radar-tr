@@ -24,8 +24,27 @@ class SignalProcessor:
     def __init__(self, db: Session, ai_enabled: bool = True):
         self.db = db
         from backend.ai.enhancer import AIEnhancer
+        from backend.signals.treng_scorer import score_signal, match_watchlist
+        from backend.db.models import WatchListCompany
+
         self.enhancer = AIEnhancer()
         self.ai_enabled = self.enhancer.enabled
+
+        # Scorer fonksiyonlarını bağla
+        class _Scorer:
+            def score_signal(self, text, title):
+                return score_signal(text, title)
+            def match_watchlist(self, text, title, companies):
+                return match_watchlist(text, title, companies)
+
+        self.scorer = _Scorer()
+
+        # Takip listesini yükle (bellekte tut — hızlı erişim)
+        self.watchlist_companies = (
+            db.query(WatchListCompany)
+            .filter(WatchListCompany.is_active == True)
+            .all()
+        )
 
     def process_pending_articles(self, limit: int = 100) -> int:
         """
@@ -114,9 +133,23 @@ class SignalProcessor:
             self.db.add(signal)
             self.db.flush()  # ID ata
 
+            # TRENG & İRDA skorlama
+            article_text = article.cleaned_text or article.raw_text or ""
+            treng_score, irda_score = self.scorer.score_signal(
+                article_text, article.title or ""
+            )
+            signal.treng_score = treng_score
+            signal.irda_score = irda_score
+
+            # Takip listesi eşleştirme
+            matched = self.scorer.match_watchlist(
+                article_text, article.title or "", self.watchlist_companies
+            )
+            if matched:
+                signal.matched_watchlist = matched
+
             # AI ile zenginleştir (Groq varsa)
             if self.ai_enabled:
-                article_text = article.cleaned_text or article.raw_text or ""
                 updates = self.enhancer.enhance_signal(
                     signal, article.title, article_text
                 )

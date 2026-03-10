@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+{% block title %}Haftalık Rapor — TRENG İstihbarat{% endblock %}
+
+{% block content %}
+<style>
+/* ── Kontrol Paneli ────────────────────────────────────────────── */
+.report-controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.period-btn { padding:7px 16px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text-muted); font-size:13px; cursor:pointer; transition:.15s; }
+.period-btn.active, .period-btn:hover { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+/* ── Skor Rozetleri ────────────────────────────────────────────── */
+.score-treng { display:inline-flex; align-items:center; gap:4px; background:rgba(59,130,246,.18); color:#60a5fa; padding:3px 8px; border-radius:6px; font-size:12px; font-weight:600; }
+.score-irda  { display:inline-flex; align-items:center; gap:4px; background:rgba(168,85,247,.18); color:#c084fc; padding:3px 8px; border-radius:6px; font-size:12px; font-weight:600; }
+.score-high  { color:#34d399; }
+.score-mid   { color:#fbbf24; }
+.score-low   { color:var(--text-muted); }
+
+/* ── Özet Kartı ────────────────────────────────────────────────── */
+.exec-summary { background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(16,185,129,.06)); border:1px solid rgba(99,102,241,.25); border-radius:12px; padding:20px 24px; line-height:1.7; white-space:pre-wrap; font-size:14px; }
+
+/* ── Stat Bloklar ──────────────────────────────────────────────── */
+.stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:12px; margin-bottom:20px; }
+.stat-box { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px 16px; text-align:center; }
+.stat-box .stat-num { font-size:26px; font-weight:700; line-height:1; }
+.stat-box .stat-lbl { font-size:11px; color:var(--text-muted); margin-top:4px; }
+
+/* ── Bulgu Kartları ────────────────────────────────────────────── */
+.finding-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:10px; }
+.finding-card:hover { border-color:var(--accent); }
+.finding-meta { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px; }
+.finding-company { font-weight:600; font-size:14px; }
+.finding-summary { font-size:13px; line-height:1.6; color:var(--text); margin-bottom:10px; }
+.finding-evidence { font-size:12px; color:var(--text-muted); border-left:2px solid var(--accent); padding-left:10px; margin-bottom:8px; font-style:italic; }
+.finding-source { font-size:11px; color:var(--text-muted); display:flex; align-items:center; gap:6px; }
+.finding-source a { color:var(--accent); text-decoration:none; }
+.finding-reason { font-size:12px; background:rgba(99,102,241,.08); border-radius:6px; padding:6px 10px; color:var(--text-muted); margin-bottom:6px; }
+
+/* ── Bölüm Başlıkları ──────────────────────────────────────────── */
+.section-header { display:flex; align-items:center; gap:10px; margin:28px 0 14px; }
+.section-header h2 { font-size:16px; font-weight:600; margin:0; }
+.section-divider { flex:1; height:1px; background:var(--border); }
+.section-count { font-size:12px; color:var(--text-muted); background:var(--card); border:1px solid var(--border); border-radius:20px; padding:2px 10px; }
+
+/* ── Fuar Kartları ─────────────────────────────────────────────── */
+.fair-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:10px; }
+.fair-name { font-weight:600; font-size:14px; margin-bottom:4px; }
+.fair-meta { font-size:12px; color:var(--text-muted); margin-bottom:8px; }
+.fair-reasons { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.fair-reason-box { background:var(--bg); border-radius:8px; padding:8px 10px; font-size:12px; }
+.fair-reason-box strong { display:block; margin-bottom:2px; }
+
+/* ── Boş Durum ─────────────────────────────────────────────────── */
+.empty-section { text-align:center; color:var(--text-muted); padding:32px; font-size:13px; }
+.empty-section .empty-icon { font-size:32px; margin-bottom:8px; }
+
+/* ── Loading ───────────────────────────────────────────────────── */
+.report-loading { text-align:center; padding:60px 20px; color:var(--text-muted); }
+.report-loading .spinner { width:36px; height:36px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 16px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ── Takip Eşleşmeleri ─────────────────────────────────────────── */
+.watchmatch-badge { background:rgba(251,191,36,.15); color:#fbbf24; padding:2px 8px; border-radius:6px; font-size:11px; font-weight:600; }
+</style>
+
+<div class="page-actions">
+  <div class="report-controls">
+    <span style="font-size:13px;color:var(--text-muted)">Dönem:</span>
+    <button class="period-btn active" data-days="7" onclick="setPeriod(7,this)">7 Gün</button>
+    <button class="period-btn" data-days="14" onclick="setPeriod(14,this)">2 Hafta</button>
+    <button class="period-btn" data-days="30" onclick="setPeriod(30,this)">1 Ay</button>
+    <button class="period-btn" data-days="60" onclick="setPeriod(60,this)">2 Ay</button>
+    <button class="period-btn" data-days="90" onclick="setPeriod(90,this)">3 Ay</button>
+    <button class="period-btn" data-days="120" onclick="setPeriod(120,this)">4 Ay</button>
+  </div>
+  <button class="btn btn-primary" onclick="generateReport()" id="gen-btn">Rapor Üret</button>
+</div>
+
+<div id="report-container">
+  <div class="empty-section" style="padding:80px 20px">
+    <div class="empty-icon">📋</div>
+    <div>Dönem seçip <strong>Rapor Üret</strong>'e tıklayın.</div>
+    <div style="font-size:12px;margin-top:6px">TRENG & İRDA için yapılandırılmış istihbarat raporu oluşturulacak.</div>
+  </div>
+</div>
+
+<script>
+let currentDays = 7;
+
+function setPeriod(days, btn) {
+  currentDays = days;
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+async function generateReport() {
+  const btn = document.getElementById('gen-btn');
+  btn.disabled = true;
+  btn.textContent = 'Üretiliyor...';
+
+  document.getElementById('report-container').innerHTML = `
+    <div class="report-loading">
+      <div class="spinner"></div>
+      <div>Sinyaller analiz ediliyor, Groq AI özet yazıyor...</div>
+      <div style="font-size:12px;margin-top:4px;color:var(--text-muted)">Bu işlem 15–30 saniye sürebilir.</div>
+    </div>`;
+
+  try {
+    const data = await API.get(`/api/report/generate?days=${currentDays}`);
+    renderReport(data);
+  } catch(e) {
+    document.getElementById('report-container').innerHTML =
+      `<div class="empty-section"><div class="empty-icon">⚠️</div><div>Rapor üretilemedi: ${e.message}</div></div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Rapor Üret';
+  }
+}
+
+function renderReport(d) {
+  const stats = d.stats;
+  const since = d.since;
+  const until = d.until;
+
+  let html = `
+  <!-- Başlık & Meta -->
+  <div style="margin-bottom:20px">
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">
+      ${since} — ${until} · ${d.period_days} günlük tarama · Üretildi: ${new Date(d.generated_at).toLocaleTimeString('tr-TR')}
+    </div>
+  </div>
+
+  <!-- İstatistik Blokları -->
+  <div class="stat-grid">
+    <div class="stat-box">
+      <div class="stat-num" style="color:#60a5fa">${stats.treng_signals}</div>
+      <div class="stat-lbl">🔧 TRENG Sinyali</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" style="color:#c084fc">${stats.irda_signals}</div>
+      <div class="stat-lbl">🏗️ İRDA Sinyali</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" style="color:#fbbf24">${stats.matched_watchlist}</div>
+      <div class="stat-lbl">📋 Takip Eşleşmesi</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" style="color:var(--text-muted)">${stats.watch_signals}</div>
+      <div class="stat-lbl">👀 Takipte</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num">${stats.total_signals}</div>
+      <div class="stat-lbl">Toplam Sinyal</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-num" style="color:#34d399">${stats.watchlist_count}</div>
+      <div class="stat-lbl">Takip Listesi</div>
+    </div>
+  </div>
+
+  <!-- Yönetici Özeti -->
+  <div class="section-header">
+    <h2>🧠 Yönetici Özeti</h2>
+    <div class="section-divider"></div>
+  </div>
+  <div class="exec-summary">${escHtml(d.executive_summary)}</div>`;
+
+  // TRENG Bulgular
+  html += sectionHeader('🔧 TRENG — Önemli Bulgular', d.treng_findings.length);
+  if (d.treng_findings.length) {
+    d.treng_findings.forEach(s => { html += findingCard(s, 'treng'); });
+  } else {
+    html += emptySection('Bu dönemde TRENG için eşiği aşan sinyal bulunamadı.');
+  }
+
+  // İRDA Bulgular
+  html += sectionHeader('🏗️ İRDA — Önemli Bulgular', d.irda_findings.length);
+  if (d.irda_findings.length) {
+    d.irda_findings.forEach(s => { html += findingCard(s, 'irda'); });
+  } else {
+    html += emptySection('Bu dönemde İRDA için eşiği aşan sinyal bulunamadı.');
+  }
+
+  // Takip Listesi Eşleşmeleri
+  if (d.watchlist_matches.length) {
+    html += sectionHeader('📋 Takip Listesi Eşleşmeleri', d.watchlist_matches.length);
+    d.watchlist_matches.forEach(s => { html += findingCard(s, 'both'); });
+  }
+
+  // Takipte Olanlar
+  html += sectionHeader('👀 Takipte Olanlar', d.watch_later.length,
+    'Kanıtı zayıf ama izlenmesi gereken sinyaller');
+  if (d.watch_later.length) {
+    d.watch_later.forEach(s => { html += findingCard(s, 'watch'); });
+  } else {
+    html += emptySection('Takip edilecek zayıf sinyal bulunamadı.');
+  }
+
+  // Fuar Radari
+  html += sectionHeader('📅 Fuar Radari', d.fair_radar.length,
+    '90–180 gün içindeki Türkiye fuarları');
+  d.fair_radar.forEach(f => { html += fairCard(f); });
+
+  document.getElementById('report-container').innerHTML = html;
+}
+
+function sectionHeader(title, count, subtitle) {
+  return `
+  <div class="section-header">
+    <h2>${title}</h2>
+    ${count !== undefined ? `<span class="section-count">${count}</span>` : ''}
+    <div class="section-divider"></div>
+    ${subtitle ? `<span style="font-size:11px;color:var(--text-muted)">${subtitle}</span>` : ''}
+  </div>`;
+}
+
+function emptySection(msg) {
+  return `<div class="empty-section"><div class="empty-icon">—</div><div>${msg}</div></div>`;
+}
+
+function scoreColor(v) {
+  return v >= 60 ? 'score-high' : v >= 30 ? 'score-mid' : 'score-low';
+}
+
+function findingCard(s, mode) {
+  const trengScore = Math.round(s.treng_score || 0);
+  const irdaScore = Math.round(s.irda_score || 0);
+  const watchMatches = s.matched_watchlist || [];
+
+  let scoreHtml = '';
+  if (mode !== 'irda') scoreHtml += `<span class="score-treng">🔧 ${trengScore}</span>`;
+  if (mode !== 'treng') scoreHtml += `<span class="score-irda">🏗️ ${irdaScore}</span>`;
+
+  const watchHtml = watchMatches.map(w =>
+    `<span class="watchmatch-badge">📋 ${escHtml(w.name)}</span>`
+  ).join(' ');
+
+  const evidence = (s.evidence || []).slice(0, 1);
+  const evidenceHtml = evidence.length
+    ? `<div class="finding-evidence">"${escHtml(evidence[0])}"</div>` : '';
+
+  const dateStr = s.article_date ? `<span>${s.article_date}</span>` : '';
+  const sourceStr = s.article_url
+    ? `<a href="${s.article_url}" target="_blank" rel="noopener">
+        ${escHtml(s.source_name || s.article_title || 'Kaynak')} ↗
+       </a>`
+    : escHtml(s.source_name || '—');
+
+  return `
+  <div class="finding-card">
+    <div class="finding-meta">
+      ${s.company ? `<span class="finding-company">${escHtml(s.company)}</span>` : ''}
+      <span class="tag">${escHtml(s.signal_type || '')}</span>
+      ${s.country ? `<span class="tag" style="color:var(--text-muted)">${escHtml(s.country)}</span>` : ''}
+      ${s.city ? `<span class="tag" style="color:var(--text-muted)">${escHtml(s.city)}</span>` : ''}
+      ${scoreHtml}
+      ${watchHtml}
+    </div>
+    <div class="finding-summary">${escHtml(s.summary_tr || '—')}</div>
+    ${evidenceHtml}
+    <div class="finding-source">${dateStr}${dateStr ? '<span>·</span>' : ''}${sourceStr}</div>
+  </div>`;
+}
+
+function fairCard(f) {
+  const sectors = (f.sectors || []).map(s => `<span class="tag" style="font-size:11px">${escHtml(s)}</span>`).join('');
+  return `
+  <div class="fair-card">
+    <div class="fair-name">
+      ${f.url ? `<a href="${f.url}" target="_blank" style="color:var(--text);text-decoration:none">${escHtml(f.name)} ↗</a>` : escHtml(f.name)}
+    </div>
+    <div class="fair-meta">📅 ${escHtml(f.dates)} &nbsp;|&nbsp; 📍 ${escHtml(f.location)} &nbsp; ${sectors}</div>
+    <div class="fair-reasons">
+      <div class="fair-reason-box">
+        <strong style="color:#60a5fa">🔧 TRENG için</strong>
+        ${escHtml(f.treng_reason)}
+      </div>
+      <div class="fair-reason-box">
+        <strong style="color:#c084fc">🏗️ İRDA için</strong>
+        ${escHtml(f.irda_reason)}
+      </div>
+    </div>
+  </div>`;
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+{% endblock %}
