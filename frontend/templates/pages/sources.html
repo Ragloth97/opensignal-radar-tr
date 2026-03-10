@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+{% block title %}Kaynak Yönetimi — OpenSignal Radar TR{% endblock %}
+{% block page_title %}Kaynak Yönetimi{% endblock %}
+
+{% block page_header_actions %}
+<div class="flex gap-3 ml-auto items-center">
+  <button class="btn btn-primary btn-sm" onclick="showAddModal()">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2v12M2 8h12"/></svg>
+    Kaynak Ekle
+  </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Stats -->
+<div class="stat-grid" style="margin-bottom:24px" id="source-stats">
+  <div class="stat-card skeleton" style="height:80px"></div>
+  <div class="stat-card skeleton" style="height:80px"></div>
+</div>
+
+<!-- Source List -->
+<div class="card">
+  <div class="card-header">
+    <span class="heading-md">Kaynak Listesi</span>
+    <div class="flex gap-2 items-center">
+      <select id="filter-active" style="width:auto;font-size:12px;padding:5px 8px">
+        <option value="">Tümü</option>
+        <option value="true">Aktif</option>
+        <option value="false">Pasif</option>
+      </select>
+    </div>
+  </div>
+  <div id="sources-list">
+    <div style="display:flex;align-items:center;justify-content:center;padding:40px">
+      <div class="spinner"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Source Modal -->
+<div id="add-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:200;display:none;align-items:center;justify-content:center">
+  <div style="background:var(--bg-card);border:1px solid var(--border-default);border-radius:var(--radius-xl);padding:24px;width:520px;max-width:90vw;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <span class="heading-md">Yeni Kaynak Ekle</span>
+      <button class="btn-icon" onclick="closeAddModal()">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+      </button>
+    </div>
+    <form id="add-source-form">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="input-group">
+          <label class="input-label">Kaynak Adı *</label>
+          <input type="text" name="name" placeholder="Reuters - Enerji" required>
+        </div>
+        <div class="input-group">
+          <label class="input-label">Ana URL *</label>
+          <input type="url" name="base_url" placeholder="https://example.com" required>
+        </div>
+        <div class="input-group">
+          <label class="input-label">RSS Feed URL (varsa)</label>
+          <input type="url" name="feed_url" placeholder="https://example.com/rss.xml">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="input-group">
+            <label class="input-label">Kaynak Tipi</label>
+            <select name="source_type">
+              <option value="rss">RSS Feed</option>
+              <option value="news_site" selected>Haber Sitesi</option>
+              <option value="government">Devlet Duyurusu</option>
+              <option value="press_room">Basın Odası</option>
+              <option value="career_page">Kariyer Sayfası</option>
+              <option value="incentive">Teşvik Kaynağı</option>
+              <option value="tender">İhale</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label class="input-label">Ülke</label>
+            <input type="text" name="country" placeholder="Türkiye">
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="input-group">
+            <label class="input-label">Güven Skoru (0-1)</label>
+            <input type="number" name="trust_score" min="0" max="1" step="0.05" value="0.5">
+          </div>
+          <div class="input-group">
+            <label class="input-label">Öncelik Skoru (0-1)</label>
+            <input type="number" name="priority_score" min="0" max="1" step="0.05" value="0.5">
+          </div>
+        </div>
+        <div class="input-group">
+          <label class="input-label">Notlar</label>
+          <textarea name="notes" rows="2" placeholder="Kaynak hakkında notlar..."></textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:20px;justify-content:flex-end">
+        <button type="button" class="btn btn-ghost" onclick="closeAddModal()">İptal</button>
+        <button type="submit" class="btn btn-primary">Kaynak Ekle</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function loadSources() {
+  const active = document.getElementById('filter-active').value;
+  const params = { per_page: 100 };
+  if (active !== '') params.is_active = active;
+
+  try {
+    const data = await API.get('/api/sources/', params);
+
+    // Stats
+    const activeCount = data.items.filter(s => s.is_active).length;
+    document.getElementById('source-stats').innerHTML = `
+      <div class="stat-card">
+        <div class="stat-label">Toplam Kaynak</div>
+        <div class="stat-value">${data.total}</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-label">Aktif Kaynak</div>
+        <div class="stat-value">${activeCount}</div>
+      </div>`;
+
+    if (!data.items.length) {
+      document.getElementById('sources-list').innerHTML =
+        '<div class="empty-state"><h3>Henüz kaynak eklenmedi</h3><p>Kaynak Ekle butonunu kullanarak başlayın.</p></div>';
+      return;
+    }
+
+    document.getElementById('sources-list').innerHTML = `
+      <div class="table-wrapper" style="border:none">
+        <table>
+          <thead><tr>
+            <th>Kaynak</th>
+            <th>Tip</th>
+            <th>Ülke</th>
+            <th>Güven</th>
+            <th>Öncelik</th>
+            <th>Makale</th>
+            <th>Son Kontrol</th>
+            <th>Durum</th>
+            <th>İşlem</th>
+          </tr></thead>
+          <tbody>
+            ${data.items.map(src => `
+              <tr>
+                <td>
+                  <div style="font-size:13px;font-weight:500;color:var(--text-primary)">${escHtml(src.name)}</div>
+                  <div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px">
+                    <a href="${escHtml(src.base_url)}" target="_blank" style="color:var(--text-muted)">${escHtml(src.base_url)}</a>
+                  </div>
+                </td>
+                <td><span class="tag">${sourceTypeLabel(src.source_type)}</span></td>
+                <td style="font-size:12px;color:var(--text-secondary)">${src.country || '—'}</td>
+                <td>${buildScoreBadge(src.trust_score)}</td>
+                <td>${buildScoreBadge(src.priority_score)}</td>
+                <td style="font-size:13px;color:var(--text-secondary)">${formatNumber(src.article_count)}</td>
+                <td style="font-size:12px;color:var(--text-muted);white-space:nowrap">
+                  ${src.last_checked_at ? formatDate(src.last_checked_at) : 'Hiç'}
+                </td>
+                <td>
+                  <span class="tag ${src.is_active ? 'tag-green' : ''}" style="${!src.is_active ? 'color:var(--text-muted)' : ''}">
+                    ${src.is_active ? 'Aktif' : 'Pasif'}
+                  </span>
+                </td>
+                <td>
+                  <div style="display:flex;gap:4px">
+                    <button class="btn btn-ghost btn-sm" onclick="triggerIngest(${src.id}, '${escHtml(src.name)}')" title="Hemen Tara">
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/><path d="M13.5 2.5V6H10"/>
+                      </svg>
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="toggleSource(${src.id}, ${src.is_active})" title="${src.is_active ? 'Pasifleştir' : 'Aktifleştir'}">
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 4l8 8M12 4l-8 8"/>
+                      </svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } catch(e) {
+    Toast.error('Kaynaklar yüklenemedi');
+  }
+}
+
+function sourceTypeLabel(t) {
+  const map = {
+    'rss': 'RSS', 'news_site': 'Haber', 'government': 'Devlet',
+    'press_room': 'Basın Odası', 'career_page': 'Kariyer',
+    'incentive': 'Teşvik', 'tender': 'İhale', 'open_data': 'Açık Veri',
+  };
+  return map[t] || t;
+}
+
+async function triggerIngest(sourceId, name) {
+  try {
+    await API.post(`/api/sources/${sourceId}/ingest`);
+    Toast.success(`${name} taranıyor...`);
+    setTimeout(loadSources, 3000);
+  } catch(e) {
+    Toast.error('Tarama başlatılamadı');
+  }
+}
+
+async function toggleSource(sourceId, isActive) {
+  try {
+    if (isActive) {
+      await API.delete(`/api/sources/${sourceId}`);
+      Toast.info('Kaynak pasifleştirildi');
+    } else {
+      await API.patch(`/api/sources/${sourceId}`, { is_active: true });
+      Toast.success('Kaynak aktifleştirildi');
+    }
+    loadSources();
+  } catch(e) {
+    Toast.error('İşlem başarısız');
+  }
+}
+
+function showAddModal() {
+  document.getElementById('add-modal').style.display = 'flex';
+}
+function closeAddModal() {
+  document.getElementById('add-modal').style.display = 'none';
+  document.getElementById('add-source-form').reset();
+}
+
+document.getElementById('add-source-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const data = Object.fromEntries(new FormData(form).entries());
+  data.trust_score = parseFloat(data.trust_score);
+  data.priority_score = parseFloat(data.priority_score);
+  if (!data.feed_url) delete data.feed_url;
+  if (!data.country) delete data.country;
+  if (!data.notes) delete data.notes;
+
+  try {
+    await API.post('/api/sources/', data);
+    Toast.success('Kaynak eklendi');
+    closeAddModal();
+    loadSources();
+  } catch(e) {
+    Toast.error('Kaynak eklenemedi: ' + e.message);
+  }
+});
+
+document.getElementById('filter-active').addEventListener('change', loadSources);
+
+loadSources();
+</script>
+{% endblock %}

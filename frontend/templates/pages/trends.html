@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Trendler — OpenSignal Radar TR{% endblock %}
+{% block page_title %}Trend Analizi{% endblock %}
+
+{% block page_header_actions %}
+<div class="flex gap-3 ml-auto items-center">
+  <button class="btn btn-ghost btn-sm" onclick="triggerAnalysis()">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/><path d="M13.5 2.5V6H10"/>
+    </svg>
+    Analizi Yenile
+  </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div style="font-size:13px;color:var(--text-secondary);margin-bottom:24px;max-width:680px;line-height:1.6">
+  Trend analizi, son 14 günlük sinyalleri sektör, coğrafya ve sinyal tipi bazında kümeleştirir.
+  Üç veya daha fazla benzer sinyal bir araya geldiğinde otomatik olarak bir trend kümesi oluşturulur.
+</div>
+
+<!-- Filter -->
+<div class="filter-bar" style="margin-bottom:24px">
+  <select id="filter-sector" style="width:auto">
+    <option value="">Tüm Sektörler</option>
+    <option value="enerji">Enerji</option>
+    <option value="veri_merkezi">Veri Merkezi</option>
+    <option value="yari_iletken">Yarı İletken</option>
+    <option value="otomotiv">Otomotiv</option>
+    <option value="madencilik">Madencilik</option>
+    <option value="uretim">Üretim</option>
+    <option value="savunma">Savunma</option>
+    <option value="lojistik">Lojistik</option>
+  </select>
+</div>
+
+<!-- Trend Cards -->
+<div id="trends-container">
+  <div style="display:flex;align-items:center;justify-content:center;padding:40px">
+    <div class="spinner"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function loadTrends() {
+  const sector = document.getElementById('filter-sector').value;
+  const params = { per_page: 30 };
+  if (sector) params.sector = sector;
+
+  try {
+    const data = await API.get('/api/trends/', params);
+    const container = document.getElementById('trends-container');
+
+    if (!data.items || !data.items.length) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M4 36L16 22l8 8 12-14 8 8"/>
+            </svg>
+          </div>
+          <h3>Henüz trend kümesi yok</h3>
+          <p>Yeterli sinyal biriktiğinde trendler otomatik oluşturulur. Analizi Yenile ile tetikleyebilirsiniz.</p>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = `<div class="grid-3">` +
+      data.items.map(cluster => `
+        <div class="trend-card" onclick="loadClusterDetail(${cluster.id})" style="cursor:pointer">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:4px">
+            <span style="font-size:12px;color:var(--accent);font-weight:500">
+              ${cluster.sector ? Industries.label(cluster.sector) : 'Genel Analiz'}
+            </span>
+            <div style="display:flex;gap:4px">
+              ${cluster.geography ? `<span class="tag" style="font-size:10px">${escHtml(cluster.geography)}</span>` : ''}
+              <span class="tag tag-blue" style="font-size:10px">${cluster.signal_count} sinyal</span>
+            </div>
+          </div>
+
+          <div style="font-size:14px;font-weight:600;color:var(--text-primary);line-height:1.4;margin-bottom:8px">
+            ${escHtml(cluster.label)}
+          </div>
+
+          <div style="font-size:12px;color:var(--text-secondary);line-height:1.6;margin-bottom:12px">
+            ${escHtml((cluster.description_tr || '').slice(0, 160))}${cluster.description_tr && cluster.description_tr.length > 160 ? '…' : ''}
+          </div>
+
+          <div class="trend-strength">
+            <div class="trend-bar">
+              <div class="trend-bar-fill" style="width:${(cluster.cluster_score*100).toFixed(0)}%"></div>
+            </div>
+            <span style="font-size:11px;color:var(--text-muted)">
+              Güç: ${Scores.format(cluster.cluster_score)}
+            </span>
+          </div>
+
+          ${cluster.last_seen_at ? `
+          <div style="font-size:11px;color:var(--text-muted);margin-top:8px">
+            Son: ${formatDate(cluster.last_seen_at)}
+          </div>` : ''}
+        </div>`
+      ).join('') + `</div>`;
+
+  } catch(e) {
+    Toast.error('Trendler yüklenemedi');
+  }
+}
+
+// Cluster detail modal
+async function loadClusterDetail(clusterId) {
+  try {
+    const cluster = await API.get(`/api/trends/${clusterId}`);
+    showClusterModal(cluster);
+  } catch(e) {
+    Toast.error('Küme detayı yüklenemedi');
+  }
+}
+
+function showClusterModal(cluster) {
+  const existing = document.getElementById('cluster-modal');
+  if (existing) existing.remove();
+
+  const signals = cluster.signals || [];
+  const modal = document.createElement('div');
+  modal.id = 'cluster-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML = `
+    <div style="background:var(--bg-card);border:1px solid var(--border-default);border-radius:var(--radius-xl);padding:24px;width:600px;max-width:95vw;max-height:85vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+        <div>
+          <div style="font-size:12px;color:var(--accent);margin-bottom:4px">${cluster.sector ? Industries.label(cluster.sector) : 'Genel'}</div>
+          <div class="heading-md">${escHtml(cluster.label)}</div>
+        </div>
+        <button class="btn-icon" onclick="document.getElementById('cluster-modal').remove()">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+        </button>
+      </div>
+
+      <p style="font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:16px">
+        ${escHtml(cluster.description_tr || '')}
+      </p>
+
+      <div style="display:flex;gap:16px;margin-bottom:20px">
+        <div>
+          <div class="label">Sinyal Sayısı</div>
+          <div style="font-size:20px;font-weight:700;color:var(--text-primary)">${cluster.signal_count}</div>
+        </div>
+        <div>
+          <div class="label">Küme Gücü</div>
+          <div style="font-size:20px;font-weight:700;color:var(--text-primary)">${Scores.format(cluster.cluster_score)}</div>
+        </div>
+      </div>
+
+      ${signals.length ? `
+      <div>
+        <div class="label" style="margin-bottom:10px">Bu Kümedeki Sinyaller</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${signals.map(s => `
+            <a href="/sinyaller/${s.id}" style="text-decoration:none;display:flex;gap:10px;align-items:center;padding:10px 12px;background:var(--bg-elevated);border-radius:var(--radius);transition:background 0.15s" onmouseenter="this.style.background='var(--bg-card-hover)'" onmouseleave="this.style.background='var(--bg-elevated)'">
+              ${buildSignalBadge(s.signal_type)}
+              <span style="font-size:13px;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                ${escHtml(s.detected_company || s.summary_tr?.slice(0,60) || '—')}
+              </span>
+              ${s.country ? `<span style="font-size:11px;color:var(--text-muted)">${escHtml(s.country)}</span>` : ''}
+              ${buildScoreBadge(s.composite_score)}
+            </a>`).join('')}
+        </div>
+      </div>` : ''}
+    </div>`;
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
+  document.body.appendChild(modal);
+}
+
+async function triggerAnalysis() {
+  try {
+    await API.post('/api/trends/analyze');
+    Toast.success('Trend analizi başlatıldı');
+    setTimeout(loadTrends, 3000);
+  } catch(e) {
+    Toast.error('Analiz başlatılamadı');
+  }
+}
+
+document.getElementById('filter-sector').addEventListener('change', loadTrends);
+loadTrends();
+</script>
+{% endblock %}

@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+{% block title %}Intelligence Briefing — OpenSignal Radar TR{% endblock %}
+{% block page_title %}Intelligence Briefing{% endblock %}
+
+{% block page_header_actions %}
+<div class="flex gap-3 ml-auto items-center">
+  <span id="briefing-date" style="font-size:12px;color:var(--text-muted)"></span>
+  <a href="/api/export/signals/json?days=7" class="btn btn-ghost btn-sm">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M8 2v8M5 7l3 3 3-3M2 12v1a1 1 0 001 1h10a1 1 0 001-1v-1"/>
+    </svg>
+    JSON Export
+  </a>
+  <button class="btn btn-ghost btn-sm" onclick="loadDeck()">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/><path d="M13.5 2.5V6H10"/>
+    </svg>
+    Yenile
+  </button>
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="deck-root">
+  <div style="display:flex;align-items:center;justify-content:center;height:200px">
+    <div class="spinner" style="width:24px;height:24px"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function loadDeck() {
+  const root = document.getElementById('deck-root');
+  root.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:200px"><div class="spinner" style="width:24px;height:24px"></div></div>';
+
+  try {
+    const deck = await API.get('/api/deck/briefing');
+    renderDeck(deck);
+  } catch(e) {
+    root.innerHTML = `<div style="color:var(--red);padding:20px">Briefing yüklenemedi: ${e.message}</div>`;
+  }
+}
+
+function renderDeck(deck) {
+  const dateEl = document.getElementById('briefing-date');
+  if (dateEl && deck.generated_at) {
+    const d = new Date(deck.generated_at);
+    dateEl.textContent = d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+
+  const root = document.getElementById('deck-root');
+  root.innerHTML = `
+    ${renderSection('01', 'GENEL BAKIŞ', renderOverview(deck.section_1_overview))}
+    ${renderSection('02', 'KRİTİK GELİŞMELER', renderCritical(deck.section_2_critical))}
+    ${renderSection('03', 'GELİŞEN ÖRÜNTÜLER', renderPatterns(deck.section_3_patterns))}
+    ${renderSection('04', 'BÖLGESEL GÖRÜNÜM', renderRegional(deck.section_4_regional))}
+    ${renderSection('05', 'SEKTÖREL GÖRÜNÜM', renderSectoral(deck.section_5_sectoral))}
+    ${renderSection('06', 'YAKINEN İZLENMESİ GEREKENLER', renderWatchlist(deck.section_6_watchlist))}
+    ${renderSection('07', 'HAM BULGULAR', renderRaw(deck.section_7_raw))}
+  `;
+}
+
+function renderSection(num, title, content) {
+  return `
+    <div class="deck-section">
+      <div class="deck-section-header">
+        <div class="deck-section-number">${num}</div>
+        <span class="deck-section-title">${title}</span>
+        <div class="deck-section-line"></div>
+      </div>
+      ${content}
+    </div>`;
+}
+
+function renderOverview(ov) {
+  if (!ov) return '<div style="color:var(--text-muted)">Veri yok</div>';
+  return `
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px">
+      <div class="card-sm">
+        <div class="stat-label">Bugün Tespit Edilen</div>
+        <div style="font-size:28px;font-weight:700;color:var(--text-primary);margin-top:4px">${formatNumber(ov.today_signal_count)}</div>
+      </div>
+      <div class="card-sm">
+        <div class="stat-label">Bu Hafta</div>
+        <div style="font-size:28px;font-weight:700;color:var(--text-primary);margin-top:4px">${formatNumber(ov.week_signal_count)}</div>
+      </div>
+      <div class="card-sm">
+        <div class="stat-label">Yüksek Etkili (Bugün)</div>
+        <div style="font-size:28px;font-weight:700;color:var(--green);margin-top:4px">${formatNumber(ov.high_impact_today)}</div>
+      </div>
+      <div class="card-sm">
+        <div class="stat-label">Öne Çıkan Tema</div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-top:8px;line-height:1.5">${escHtml(ov.main_theme || 'Analiz için yeterli sinyal yok')}</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card-sm">
+        <div class="label" style="margin-bottom:12px">Öne Çıkan Ülkeler</div>
+        ${(ov.top_countries || []).map((c, i) => `
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <span style="font-size:11px;color:var(--text-muted);width:20px">#${i+1}</span>
+            <span style="font-size:13px;color:var(--text-primary);flex:1">${escHtml(c.country)}</span>
+            <span class="tag">${c.count} sinyal</span>
+          </div>`).join('') || '<span style="color:var(--text-muted);font-size:13px">Veri yok</span>'}
+      </div>
+      <div class="card-sm">
+        <div class="label" style="margin-bottom:12px">Öne Çıkan Sektörler</div>
+        ${(ov.top_sectors || []).map((s, i) => `
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <span style="font-size:11px;color:var(--text-muted);width:20px">#${i+1}</span>
+            <span style="font-size:13px;color:var(--text-primary);flex:1">${Industries.label(s.sector)}</span>
+            <span class="tag">${s.count} sinyal</span>
+          </div>`).join('') || '<span style="color:var(--text-muted);font-size:13px">Veri yok</span>'}
+      </div>
+    </div>`;
+}
+
+function renderCritical(items) {
+  if (!items || !items.length) {
+    return `<div class="empty-state"><h3>Henüz kritik sinyal yok</h3><p>Veri toplandıkça bu bölüm dolacak.</p></div>`;
+  }
+  return items.map((sig, i) => `
+    <a href="/sinyaller/${sig.id}" style="text-decoration:none;display:block;margin-bottom:12px">
+      <div class="critical-signal">
+        <div class="critical-rank">${String(i+1).padStart(2,'0')}</div>
+        <div class="critical-body">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            ${buildSignalBadge(sig.signal_type)}
+            ${sig.country ? `<span style="font-size:12px;color:var(--text-muted)">${escHtml(sig.country)}</span>` : ''}
+            ${sig.industry ? `<span style="font-size:12px;color:var(--text-muted)">${Industries.label(sig.industry)}</span>` : ''}
+          </div>
+          <div class="critical-company">${escHtml(sig.detected_company || sig.article_title || 'Şirket Tespit Edilemedi')}</div>
+          <div class="critical-summary">${escHtml(sig.summary_tr || '—')}</div>
+          ${sig.why_important ? `<div class="critical-why">${escHtml(sig.why_important)}</div>` : ''}
+          ${sig.evidence_phrases && sig.evidence_phrases.length ? `
+          <div class="evidence-list" style="margin-top:10px">
+            ${sig.evidence_phrases.slice(0,1).map(e => `<div class="evidence-pill">${escHtml(e)}</div>`).join('')}
+          </div>` : ''}
+        </div>
+        <div class="critical-scores">
+          ${buildScoreBar('Güven', sig.confidence_score)}
+          ${buildScoreBar('Etki', sig.impact_score)}
+          ${buildScoreBar('Öncelik', sig.composite_score)}
+        </div>
+      </div>
+    </a>`).join('');
+}
+
+function renderPatterns(clusters) {
+  if (!clusters || !clusters.length) {
+    return `<div style="color:var(--text-muted);font-size:13px;padding:12px 0">Henüz örüntü tespit edilmedi. Daha fazla veri toplanması gerekiyor.</div>`;
+  }
+  return `<div class="grid-3">` + clusters.map(c => `
+    <div class="trend-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <span style="font-size:12px;color:var(--accent)">${c.sector ? Industries.label(c.sector) : 'Genel'}</span>
+        ${c.geography ? `<span style="font-size:11px;color:var(--text-muted)">${escHtml(c.geography)}</span>` : ''}
+      </div>
+      <div style="font-size:14px;font-weight:600;color:var(--text-primary);line-height:1.4">${escHtml(c.label)}</div>
+      <div style="font-size:12px;color:var(--text-secondary);line-height:1.6">${escHtml((c.description_tr || '').slice(0, 180))}${c.description_tr && c.description_tr.length > 180 ? '…' : ''}</div>
+      <div class="trend-strength">
+        <div class="trend-bar"><div class="trend-bar-fill" style="width:${(c.cluster_score*100).toFixed(0)}%"></div></div>
+        <span style="font-size:11px;color:var(--text-muted)">${c.signal_count} sinyal</span>
+      </div>
+    </div>`).join('') + `</div>`;
+}
+
+function renderRegional(regions) {
+  if (!regions || !regions.length) {
+    return `<div style="color:var(--text-muted);font-size:13px;padding:12px 0">Bölgesel veri için yeterli sinyal yok.</div>`;
+  }
+  const max = Math.max(...regions.map(r => r.signal_count));
+  return `
+    <div class="card" style="overflow:auto">
+      <table>
+        <thead><tr>
+          <th>Ülke</th>
+          <th>Sinyal</th>
+          <th>Yoğunluk</th>
+          <th>Ort. Skor</th>
+          <th>Max Etki</th>
+          <th>Dominant Sektör</th>
+        </tr></thead>
+        <tbody>
+          ${regions.map(r => `<tr>
+            <td style="font-weight:500;color:var(--text-primary)">${escHtml(r.country)}</td>
+            <td>${r.signal_count}</td>
+            <td style="min-width:100px">
+              <div style="height:4px;background:var(--bg-elevated);border-radius:100px;overflow:hidden">
+                <div style="height:100%;background:var(--accent);border-radius:100px;width:${(r.signal_count/max*100).toFixed(0)}%"></div>
+              </div>
+            </td>
+            <td>${buildScoreBadge(r.avg_composite_score)}</td>
+            <td>${buildScoreBadge(r.max_impact_score)}</td>
+            <td style="color:var(--text-secondary);font-size:12px">${Industries.label(r.dominant_sector)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function renderSectoral(sectors) {
+  if (!sectors || !sectors.length) {
+    return `<div style="color:var(--text-muted);font-size:13px;padding:12px 0">Sektörel veri için yeterli sinyal yok.</div>`;
+  }
+  return `<div class="grid-3">` + sectors.map(s => `
+    <div class="card-sm">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div>
+          <div style="font-size:14px;font-weight:600;color:var(--text-primary)">${Industries.label(s.sector)}</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">${s.signal_count} sinyal</div>
+        </div>
+        <div style="text-align:right">
+          ${buildScoreBadge(s.avg_impact)}
+        </div>
+      </div>
+      ${s.top_signal_type_label ? `
+      <div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">
+        Öne çıkan: <span style="color:var(--accent)">${s.top_signal_type_label}</span>
+      </div>` : ''}
+      ${s.active_countries && s.active_countries.length ? `
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        ${s.active_countries.map(c => `<span class="tag" style="font-size:10px">${escHtml(c)}</span>`).join('')}
+      </div>` : ''}
+      <div style="margin-top:10px">
+        ${buildScoreBar('Ort. Güven', s.avg_confidence)}
+        ${buildScoreBar('Ort. Etki', s.avg_impact)}
+      </div>
+    </div>`).join('') + `</div>`;
+}
+
+function renderWatchlist(items) {
+  if (!items || !items.length) {
+    return `<div style="color:var(--text-muted);font-size:13px;padding:12px 0">İzleme listesi şu an boş.</div>`;
+  }
+  return `<div style="display:flex;flex-direction:column;gap:10px">` + items.map(s => `
+    <a href="/sinyaller/${s.id}" style="text-decoration:none">
+      <div class="card-sm" style="display:flex;gap:16px;align-items:flex-start;cursor:pointer;transition:border-color 0.15s" onmouseenter="this.style.borderColor='var(--border-strong)'" onmouseleave="this.style.borderColor=''">
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            ${buildSignalBadge(s.signal_type)}
+            ${s.country ? `<span style="font-size:12px;color:var(--text-muted)">${escHtml(s.country)}</span>` : ''}
+          </div>
+          <div style="font-size:13px;color:var(--text-primary);margin-bottom:4px;font-weight:500">
+            ${escHtml(s.detected_company || s.summary_tr?.slice(0,80) || '—')}
+          </div>
+          <div style="font-size:12px;color:var(--amber)">${escHtml(s.watch_reason || '')}</div>
+        </div>
+        <div style="flex-shrink:0;text-align:right;display:flex;flex-direction:column;gap:4px">
+          ${buildScoreBadge(s.confidence_score)}
+          ${buildScoreBadge(s.impact_score)}
+        </div>
+      </div>
+    </a>`).join('') + `</div>`;
+}
+
+function renderRaw(items) {
+  if (!items || !items.length) {
+    return `<div style="color:var(--text-muted);font-size:13px;padding:12px 0">Son 48 saatte makale yok.</div>`;
+  }
+  return `
+    <div class="table-wrapper">
+      <table>
+        <thead><tr>
+          <th>Başlık</th>
+          <th>Kaynak</th>
+          <th>Sinyal</th>
+          <th>Yayın Tarihi</th>
+          <th>URL</th>
+        </tr></thead>
+        <tbody>
+          ${items.map(a => `<tr>
+            <td style="max-width:280px">
+              <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;color:var(--text-primary)">
+                ${escHtml(a.title || '—')}
+              </div>
+            </td>
+            <td style="font-size:12px;color:var(--text-secondary);white-space:nowrap">${escHtml(a.source_name || '—')}</td>
+            <td>
+              ${a.signal_count > 0
+                ? `<span class="tag tag-green">${a.signal_count} sinyal</span>`
+                : `<span class="tag" style="color:var(--text-muted)">—</span>`}
+            </td>
+            <td style="font-size:12px;color:var(--text-muted);white-space:nowrap">
+              ${a.published_at ? new Date(a.published_at).toLocaleDateString('tr-TR') : '—'}
+            </td>
+            <td>
+              ${a.url ? `<a href="${escHtml(a.url)}" target="_blank" style="font-size:11px;color:var(--accent)">Aç</a>` : '—'}
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+loadDeck();
+</script>
+{% endblock %}

@@ -1,0 +1,43 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+sqlalchemy>=2.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+typing-extensions>=4.0.0
+
+# HTTP ve scraping
+httpx>=0.27.0
+httpcore>=1.0.0
+beautifulsoup4>=4.12.0
+soupsieve>=1.6.0
+lxml>=5.0.0
+trafilatura>=1.0.0
+feedparser>=6.0.0
+
+# Playwright (opsiyonel, JS render için)
+# playwright>=1.40.0
+
+# Zamanlama
+apscheduler>=3.10.0
+tzlocal>=4.0.0
+
+# Utilities
+python-dateutil>=2.9.0
+tenacity>=9.0.0
+rich>=13.0.0
+python-multipart>=0.0.9
+Jinja2>=3.1.0
+aiofiles>=24.0.0
+
+# Hashing
+xxhash>=3.0.0
+
+# Date handling
+arrow>=1.3.0
+
+# Async
+anyio>=4.0.0
+greenlet>=3.0.0
+starlette>=0.38.0
+click>=8.0.0
+

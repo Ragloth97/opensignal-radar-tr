@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}İnceleme Kuyruğu — OpenSignal Radar TR{% endblock %}
+{% block page_title %}İnceleme Kuyruğu{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:24px">
+  <span style="font-size:13px;color:var(--text-secondary)">
+    Güven skoru düşük veya doğrulama gerektiren sinyaller burada listelenir.
+  </span>
+  <span id="review-count" class="tag tag-amber" style="margin-left:auto"></span>
+</div>
+
+<div id="review-list">
+  <div style="display:flex;align-items:center;justify-content:center;padding:40px">
+    <div class="spinner"></div>
+  </div>
+</div>
+<div id="pagination-container"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentPage = 1;
+
+async function loadReviewQueue(page = 1) {
+  currentPage = page;
+  try {
+    const data = await API.get('/api/signals/', {
+      page,
+      per_page: 15,
+      review_status: 'needs_review',
+    });
+
+    const badge = document.getElementById('review-count');
+    if (badge) badge.textContent = `${data.total} bekliyor`;
+
+    if (!data.items || !data.items.length) {
+      document.getElementById('review-list').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M2.5 24l9 9L46 7"/>
+            </svg>
+          </div>
+          <h3>İnceleme kuyruğu boş</h3>
+          <p>Tüm sinyaller incelendi veya henüz düşük güvenli sinyal oluşmadı.</p>
+        </div>`;
+      document.getElementById('pagination-container').innerHTML = '';
+      return;
+    }
+
+    document.getElementById('review-list').innerHTML =
+      `<div style="display:flex;flex-direction:column;gap:12px">` +
+      data.items.map(sig => buildReviewItem(sig)).join('') +
+      `</div>`;
+
+    document.getElementById('pagination-container').innerHTML =
+      buildPagination(data.page, data.pages, (p) => loadReviewQueue(p));
+
+  } catch(e) {
+    Toast.error('İnceleme kuyruğu yüklenemedi');
+  }
+}
+
+function buildReviewItem(sig) {
+  return `
+    <div class="review-item" id="review-item-${sig.id}">
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+          ${buildSignalBadge(sig.signal_type)}
+          ${sig.country ? `<span style="font-size:12px;color:var(--text-muted)">${escHtml(sig.country)}</span>` : ''}
+          ${sig.industry ? `<span style="font-size:12px;color:var(--text-muted)">${Industries.label(sig.industry)}</span>` : ''}
+          <span style="font-size:11px;color:var(--text-muted);margin-left:auto">${formatDate(sig.created_at)}</span>
+        </div>
+
+        ${sig.article_title ? `
+        <div style="font-size:14px;font-weight:500;color:var(--text-primary);margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          ${escHtml(sig.article_title)}
+        </div>` : ''}
+
+        <div style="font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:8px">
+          ${escHtml(sig.summary_tr || '—')}
+        </div>
+
+        ${sig.evidence_phrases && sig.evidence_phrases.length ? `
+        <div style="font-size:12px;color:var(--text-muted);padding:8px;background:var(--bg-elevated);border-radius:var(--radius);margin-bottom:8px;font-style:italic">
+          "${escHtml(sig.evidence_phrases[0])}"
+        </div>` : ''}
+
+        <div style="display:flex;gap:12px;align-items:center">
+          <span style="font-size:12px;color:var(--text-muted)">Güven: <span style="color:var(--text-primary)">${Scores.format(sig.confidence_score)}</span></span>
+          <span style="font-size:12px;color:var(--text-muted)">Etki: <span style="color:var(--text-primary)">${Scores.format(sig.impact_score)}</span></span>
+          ${sig.source_name ? `<span style="font-size:12px;color:var(--text-muted)">Kaynak: <span style="color:var(--text-secondary)">${escHtml(sig.source_name)}</span></span>` : ''}
+          ${sig.article_url ? `<a href="${escHtml(sig.article_url)}" target="_blank" style="font-size:12px;color:var(--accent);margin-left:auto">Kaynağı Aç</a>` : ''}
+        </div>
+      </div>
+
+      <div class="review-actions">
+        <button class="btn btn-primary btn-sm" onclick="review(${sig.id}, 'approved')">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2.5 8l4 4 7-7"/></svg>
+          Onayla
+        </button>
+        <a href="/sinyaller/${sig.id}" class="btn btn-ghost btn-sm" title="Detay">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/>
+          </svg>
+        </a>
+        <button class="btn btn-danger btn-sm" onclick="review(${sig.id}, 'rejected')" title="Reddet">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+        </button>
+      </div>
+    </div>`;
+}
+
+async function review(signalId, status) {
+  try {
+    await API.patch(`/api/signals/${signalId}/review`, { status });
+    const el = document.getElementById(`review-item-${signalId}`);
+    if (el) {
+      el.style.opacity = '0.5';
+      el.style.pointerEvents = 'none';
+      setTimeout(() => el.remove(), 300);
+    }
+    const label = status === 'approved' ? 'onaylandı' : 'reddedildi';
+    Toast.success(`Sinyal ${label}`);
+  } catch(e) {
+    Toast.error('İşlem başarısız');
+  }
+}
+
+loadReviewQueue();
+</script>
+{% endblock %}

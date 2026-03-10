@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Sinyal Detayı — OpenSignal Radar TR{% endblock %}
+{% block page_title %}Sinyal Detayı{% endblock %}
+
+{% block page_header_actions %}
+<div class="flex gap-3 ml-auto items-center">
+  <a href="/sinyaller" class="btn btn-ghost btn-sm">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M10 12L6 8l4-4"/>
+    </svg>
+    Geri
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="signal-detail-root">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:24px">
+    <div class="stat-card skeleton" style="height:80px"></div>
+    <div class="stat-card skeleton" style="height:80px"></div>
+    <div class="stat-card skeleton" style="height:80px"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const SIGNAL_ID = {{ signal_id }};
+
+async function loadSignalDetail() {
+  try {
+    const sig = await API.get(`/api/signals/${SIGNAL_ID}`);
+    renderSignalDetail(sig);
+  } catch(e) {
+    document.getElementById('signal-detail-root').innerHTML =
+      `<div style="color:var(--red);padding:20px">Sinyal bulunamadı (ID: ${SIGNAL_ID})</div>`;
+  }
+}
+
+function renderSignalDetail(sig) {
+  const root = document.getElementById('signal-detail-root');
+
+  const evidence = (sig.evidence_phrases || []);
+  const sectors = (sig.relevant_sectors || []);
+  const keywords = (sig.keywords_matched || []);
+
+  root.innerHTML = `
+    <!-- Score overview -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px">
+      <div class="stat-card">
+        <div class="stat-label">Güven Skoru</div>
+        <div class="stat-value ${Scores.colorClass(sig.confidence_score)}">${Scores.format(sig.confidence_score)}</div>
+        <div class="stat-delta">0–100 arası</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Etki Skoru</div>
+        <div class="stat-value ${Scores.colorClass(sig.impact_score)}">${Scores.format(sig.impact_score)}</div>
+        <div class="stat-delta">0–100 arası</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Bileşik Skor</div>
+        <div class="stat-value ${Scores.colorClass(sig.composite_score)}">${Scores.format(sig.composite_score)}</div>
+        <div class="stat-delta">Nihai öncelik skoru</div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="gap:20px">
+      <!-- Left: Main Info -->
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <!-- Signal Info -->
+        <div class="card">
+          <div class="card-header">
+            <span class="heading-md">Sinyal Bilgileri</span>
+            ${buildSignalBadge(sig.signal_type)}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            ${infoRow('Tespit Yöntemi', sig.detection_method === 'ai_enhanced' ? 'AI Destekli' : 'Kural Tabanlı')}
+            ${infoRow('Şirket', sig.detected_company || '—')}
+            ${infoRow('Ülke', sig.country || '—')}
+            ${infoRow('Bölge', sig.city_or_region || '—')}
+            ${infoRow('Sektör', Industries.label(sig.industry))}
+            ${infoRow('Durum', reviewStatusBadge(sig.review_status))}
+            ${infoRow('Kaynak', sig.source_name || '—')}
+            ${infoRow('Tespit Tarihi', sig.created_at ? new Date(sig.created_at).toLocaleString('tr-TR') : '—')}
+          </div>
+        </div>
+
+        <!-- Score Breakdown -->
+        <div class="card">
+          <div class="card-header">
+            <span class="heading-md">Skor Dağılımı</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            ${buildScoreBar('Güven', sig.confidence_score)}
+            ${buildScoreBar('Etki', sig.impact_score)}
+            ${buildScoreBar('İlgi', sig.relevance_score || 0)}
+          </div>
+        </div>
+
+        <!-- Review Actions -->
+        <div class="card">
+          <div class="card-header">
+            <span class="heading-md">İnceleme</span>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="reviewSignal('approved')">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2.5 8l4 4 7-7"/></svg>
+              Onayla
+            </button>
+            <button class="btn btn-ghost btn-sm" onclick="reviewSignal('needs_review')">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 6v2m0 3v.5"/><circle cx="8" cy="8" r="6.5" stroke-width="1.5"/></svg>
+              İnceleme Gerekli
+            </button>
+            <button class="btn btn-danger btn-sm" onclick="reviewSignal('rejected')">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+              Reddet
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Content -->
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <!-- Summary -->
+        <div class="card">
+          <div class="card-header">
+            <span class="heading-md">Türkçe Özet</span>
+          </div>
+          <p style="font-size:14px;color:var(--text-secondary);line-height:1.7">
+            ${escHtml(sig.summary_tr || 'Özet üretilmedi.')}
+          </p>
+        </div>
+
+        <!-- Article -->
+        <div class="card">
+          <div class="card-header">
+            <span class="heading-md">Kaynak Makale</span>
+            ${sig.article_url ? `<a href="${escHtml(sig.article_url)}" target="_blank" class="btn btn-ghost btn-sm">Kaynağı Aç</a>` : ''}
+          </div>
+          ${sig.article_title ? `<div style="font-size:14px;font-weight:500;color:var(--text-primary);margin-bottom:8px">${escHtml(sig.article_title)}</div>` : ''}
+          ${sig.article_url ? `<div style="font-size:12px;color:var(--text-muted);word-break:break-all">${escHtml(sig.article_url)}</div>` : ''}
+          ${sig.article_published_at ? `<div style="font-size:12px;color:var(--text-muted);margin-top:8px">Yayın: ${new Date(sig.article_published_at).toLocaleDateString('tr-TR')}</div>` : ''}
+        </div>
+
+        <!-- Evidence Phrases -->
+        ${evidence.length ? `
+        <div class="card">
+          <div class="card-header">
+            <span class="heading-md">Kanıt Cümleleri</span>
+          </div>
+          <div class="evidence-list">
+            ${evidence.map(e => `<div class="evidence-pill">${escHtml(e)}</div>`).join('')}
+          </div>
+        </div>` : ''}
+
+        <!-- Keywords & Sectors -->
+        <div class="card">
+          <div class="card-header">
+            <span class="heading-md">Eşleşen Anahtar Kelimeler</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">
+            ${keywords.map(k => `<span class="tag">${escHtml(k)}</span>`).join('')}
+            ${!keywords.length ? '<span style="color:var(--text-muted);font-size:13px">—</span>' : ''}
+          </div>
+          ${sectors.length ? `
+          <div style="margin-top:12px">
+            <div class="label" style="margin-bottom:8px">İlgili Sektörler</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              ${sectors.map(s => `<span class="tag tag-blue">${Industries.label(s)}</span>`).join('')}
+            </div>
+          </div>` : ''}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function infoRow(label, value) {
+  return `
+    <div style="display:flex;align-items:center;gap:12px">
+      <span style="font-size:12px;color:var(--text-muted);width:110px;flex-shrink:0">${label}</span>
+      <span style="font-size:13px;color:var(--text-primary)">${value}</span>
+    </div>`;
+}
+
+function reviewStatusBadge(status) {
+  const map = {
+    'approved': '<span class="tag tag-green">Onaylandı</span>',
+    'rejected': '<span class="tag tag-red">Reddedildi</span>',
+    'needs_review': '<span class="tag tag-amber">İnceleme Gerekli</span>',
+    'pending': '<span class="tag">Bekliyor</span>',
+  };
+  return map[status] || status;
+}
+
+async function reviewSignal(status) {
+  try {
+    await API.patch(`/api/signals/${SIGNAL_ID}/review`, { status });
+    Toast.success('Sinyal durumu güncellendi');
+    loadSignalDetail();
+  } catch(e) {
+    Toast.error('Güncellenemedi: ' + e.message);
+  }
+}
+
+loadSignalDetail();
+</script>
+{% endblock %}

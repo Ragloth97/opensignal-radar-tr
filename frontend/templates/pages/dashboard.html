@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block title %}Gösterge Paneli — OpenSignal Radar TR{% endblock %}
+{% block page_title %}Gösterge Paneli{% endblock %}
+
+{% block page_header_actions %}
+<div class="flex gap-3 ml-auto items-center">
+  <button class="btn btn-ghost btn-sm" onclick="runIngestion()">
+    <span id="ingest-icon" style="display:inline-flex">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/><path d="M13.5 2.5V6H10"/>
+      </svg>
+    </span>
+    Veri Topla
+  </button>
+  <a href="/briefing" class="btn btn-primary btn-sm">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M2 3h12M2 6h9M2 9h11M2 12h7"/>
+    </svg>
+    Günlük Briefing
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="dashboard-root">
+  <!-- Loading state -->
+  <div id="loading" class="stat-grid" style="margin-bottom:32px">
+    <div class="stat-card skeleton" style="height:90px"></div>
+    <div class="stat-card skeleton" style="height:90px"></div>
+    <div class="stat-card skeleton" style="height:90px"></div>
+    <div class="stat-card skeleton" style="height:90px"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let statsData = null;
+
+async function loadDashboard() {
+  try {
+    const [stats, deck] = await Promise.all([
+      API.get('/api/signals/stats/summary'),
+      API.get('/api/deck/briefing'),
+    ]);
+    statsData = stats;
+    renderDashboard(stats, deck);
+  } catch(e) {
+    document.getElementById('loading').innerHTML = `
+      <div style="color:var(--red);padding:20px">Veri yüklenemedi: ${e.message}</div>`;
+  }
+}
+
+function renderDashboard(stats, deck) {
+  const root = document.getElementById('dashboard-root');
+
+  const overview = deck.section_1_overview;
+
+  root.innerHTML = `
+    <!-- Stat Cards -->
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">Toplam Sinyal</div>
+        <div class="stat-value">${formatNumber(stats.total_signals)}</div>
+        <div class="stat-delta">Tüm zamanlar</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-label">Bu Hafta</div>
+        <div class="stat-value">${formatNumber(stats.week_signals)}</div>
+        <div class="stat-delta">Son 7 gün</div>
+      </div>
+      <div class="stat-card amber">
+        <div class="stat-label">Yüksek Etkili</div>
+        <div class="stat-value">${formatNumber(stats.high_impact_signals)}</div>
+        <div class="stat-delta">Etki ≥ 0.70</div>
+      </div>
+      <div class="stat-card purple">
+        <div class="stat-label">İnceleme Bekliyor</div>
+        <div class="stat-value">${formatNumber(stats.needs_review)}</div>
+        <div class="stat-delta"><a href="/inceleme">Kuyruğa git</a></div>
+      </div>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="grid-2" style="gap:20px">
+      <!-- Left: Top Signals -->
+      <div class="card">
+        <div class="card-header">
+          <span class="heading-md">Bu Haftanın Kritik Sinyalleri</span>
+          <a href="/sinyaller" class="btn btn-ghost btn-sm">Tümü</a>
+        </div>
+        <div id="top-signals-list"></div>
+      </div>
+
+      <!-- Right: Distribution -->
+      <div style="display:flex;flex-direction:column;gap:20px">
+        <div class="card">
+          <div class="card-header">
+            <span class="heading-md">Ülke Dağılımı</span>
+          </div>
+          ${renderDistributionList(stats.country_distribution, 'country', 'count')}
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="heading-md">Sektör Dağılımı</span>
+          </div>
+          ${renderSectorDist(stats.sector_distribution)}
+        </div>
+      </div>
+    </div>
+
+    <!-- Trends Section -->
+    <div style="margin-top:24px">
+      <div class="section-header">
+        <h2>Aktif Trendler</h2>
+        <a href="/trendler" class="btn btn-ghost btn-sm">Tümünü Gör</a>
+      </div>
+      <div id="trends-preview"></div>
+    </div>
+  `;
+
+  // Load top signals
+  loadTopSignals();
+
+  // Load trends preview
+  loadTrendsPreview();
+}
+
+function renderDistributionList(items, key, countKey) {
+  if (!items || !items.length) {
+    return '<div style="color:var(--text-muted);font-size:13px;padding:8px 0">Henüz veri yok</div>';
+  }
+  const max = Math.max(...items.map(i => i[countKey]));
+  return items.map(item => `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+      <span style="font-size:13px;color:var(--text-secondary);width:110px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        ${escHtml(item[key] || '—')}
+      </span>
+      <div style="flex:1;height:4px;background:var(--bg-elevated);border-radius:100px;overflow:hidden">
+        <div style="height:100%;background:var(--accent);border-radius:100px;width:${(item[countKey]/max*100).toFixed(0)}%"></div>
+      </div>
+      <span style="font-size:12px;color:var(--text-muted);width:28px;text-align:right">${item[countKey]}</span>
+    </div>`).join('');
+}
+
+function renderSectorDist(items) {
+  if (!items || !items.length) return '<div style="color:var(--text-muted);font-size:13px;padding:8px 0">Henüz veri yok</div>';
+  const max = Math.max(...items.map(i => i.count));
+  return items.map(item => {
+    const label = Industries.label(item.sector);
+    return `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+        <span style="font-size:13px;color:var(--text-secondary);width:110px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          ${escHtml(label)}
+        </span>
+        <div style="flex:1;height:4px;background:var(--bg-elevated);border-radius:100px;overflow:hidden">
+          <div style="height:100%;background:var(--teal);border-radius:100px;width:${(item.count/max*100).toFixed(0)}%"></div>
+        </div>
+        <span style="font-size:12px;color:var(--text-muted);width:28px;text-align:right">${item.count}</span>
+      </div>`;
+  }).join('');
+}
+
+async function loadTopSignals() {
+  const el = document.getElementById('top-signals-list');
+  if (!el) return;
+  try {
+    const data = await API.get('/api/signals/', {
+      per_page: 5,
+      min_impact: 0.45,
+      include_duplicates: false,
+    });
+    if (!data.items || data.items.length === 0) {
+      el.innerHTML = '<div class="empty-state" style="padding:24px"><p>Henüz sinyal yok. Veri topla butonunu kullanın.</p></div>';
+      return;
+    }
+    el.innerHTML = data.items.map((sig, i) => `
+      <a href="/sinyaller/${sig.id}" style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border-subtle);text-decoration:none;transition:opacity 0.15s" onmouseenter="this.style.opacity=0.8" onmouseleave="this.style.opacity=1">
+        <span style="font-size:20px;font-weight:800;color:var(--text-disabled);min-width:24px">${i+1}</span>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            ${buildSignalBadge(sig.signal_type)}
+            ${sig.country ? `<span style="font-size:11px;color:var(--text-muted)">${escHtml(sig.country)}</span>` : ''}
+          </div>
+          <div style="font-size:13px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            ${escHtml(sig.article_title || sig.summary_tr || '—')}
+          </div>
+          ${sig.detected_company ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px">${escHtml(sig.detected_company)}</div>` : ''}
+        </div>
+        <div style="flex-shrink:0;text-align:right">
+          ${buildScoreBadge(sig.composite_score)}
+        </div>
+      </a>
+    `).join('');
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--text-muted);font-size:13px;padding:12px 0">Yüklenemedi</div>`;
+  }
+}
+
+async function loadTrendsPreview() {
+  const el = document.getElementById('trends-preview');
+  if (!el) return;
+  try {
+    const data = await API.get('/api/trends/', { per_page: 4 });
+    if (!data.items || !data.items.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:12px 0">Henüz trend kümesi oluşmadı.</div>';
+      return;
+    }
+    el.innerHTML = `<div class="grid-4">` + data.items.map(t => `
+      <div class="card-sm" style="cursor:pointer" onclick="window.location='/trendler'">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+          <span style="font-size:12px;color:var(--accent)">${t.sector ? Industries.label(t.sector) : 'Genel'}</span>
+          <span style="font-size:11px;color:var(--text-muted)">${t.signal_count} sinyal</span>
+        </div>
+        <div style="font-size:13px;font-weight:500;color:var(--text-primary);margin-bottom:8px;line-height:1.4">${escHtml(t.label)}</div>
+        <div class="trend-bar">
+          <div class="trend-bar-fill" style="width:${(t.cluster_score*100).toFixed(0)}%"></div>
+        </div>
+      </div>
+    `).join('') + `</div>`;
+  } catch(e) {}
+}
+
+async function runIngestion() {
+  const icon = document.getElementById('ingest-icon');
+  if (icon) {
+    icon.innerHTML = '<div class="spinner" style="width:14px;height:14px"></div>';
+  }
+  try {
+    await API.post('/api/system/run-ingestion');
+    Toast.success('Veri toplama başlatıldı. Birkaç dakika içinde yeni sinyaller görünecek.');
+  } catch(e) {
+    Toast.error('Veri toplama başlatılamadı');
+  } finally {
+    if (icon) icon.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/><path d="M13.5 2.5V6H10"/></svg>`;
+  }
+}
+
+loadDashboard();
+</script>
+{% endblock %}

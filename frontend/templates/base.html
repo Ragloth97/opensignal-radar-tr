@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}OpenSignal Radar TR{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/main.css">
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+<div class="layout">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">
+        <div class="logo-icon">
+          <svg viewBox="0 0 16 16" fill="white">
+            <path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8z"/>
+            <circle cx="8" cy="8" r="2"/>
+            <path d="M8 4v1M8 11v1M4 8H3M13 8h-1M10.5 5.5l-.7.7M6.2 9.8l-.7.7M10.5 10.5l-.7-.7M6.2 6.2l-.7-.7"/>
+          </svg>
+        </div>
+        <span class="logo-name">OpenSignal<br>Radar TR</span>
+      </div>
+      <div class="logo-sub">Ekonomik Sinyal İstihbaratı</div>
+    </div>
+
+    <div class="sidebar-nav">
+      <div class="nav-section-label">Ana Görünümler</div>
+
+      <a class="nav-item" href="/">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="1.5" y="1.5" width="5" height="5" rx="1"/>
+          <rect x="9.5" y="1.5" width="5" height="5" rx="1"/>
+          <rect x="1.5" y="9.5" width="5" height="5" rx="1"/>
+          <rect x="9.5" y="9.5" width="5" height="5" rx="1"/>
+        </svg>
+        Gösterge Paneli
+      </a>
+
+      <a class="nav-item" href="/briefing">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M2 3h12M2 6h9M2 9h11M2 12h7"/>
+        </svg>
+        Intelligence Briefing
+      </a>
+
+      <div class="nav-section-label">Veri</div>
+
+      <a class="nav-item" href="/sinyaller">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M1 11l4-5 3 3 3-4 4 5"/>
+          <circle cx="5" cy="6" r="1" fill="currentColor"/>
+          <circle cx="8" cy="9" r="1" fill="currentColor"/>
+          <circle cx="11" cy="5" r="1" fill="currentColor"/>
+        </svg>
+        Sinyal Akışı
+      </a>
+
+      <a class="nav-item" href="/trendler">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M1 12L5 7l3 3 4-5 3 3"/>
+        </svg>
+        Trendler
+      </a>
+
+      <a class="nav-item" href="/inceleme">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/>
+          <circle cx="8" cy="8" r="2"/>
+        </svg>
+        İnceleme Kuyruğu
+        <span class="nav-badge" id="review-badge">—</span>
+      </a>
+
+      <div class="nav-section-label">Yönetim</div>
+
+      <a class="nav-item" href="/kaynaklar">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="8" cy="3" r="1.5"/>
+          <circle cx="3" cy="11" r="1.5"/>
+          <circle cx="13" cy="11" r="1.5"/>
+          <path d="M8 4.5v4M6.7 10l-2.2.5M9.3 10l2.2.5"/>
+        </svg>
+        Kaynak Yönetimi
+      </a>
+
+      <a class="nav-item" href="/ayarlar">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="8" cy="8" r="2.5"/>
+          <path d="M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.2 3.2l1 1M11.8 11.8l1 1M12.8 3.2l-1 1M4.2 11.8l-1 1"/>
+        </svg>
+        Ayarlar
+      </a>
+    </div>
+
+    <div class="sidebar-footer">
+      <div style="display:flex;align-items:center;margin-bottom:6px;">
+        <span class="status-dot"></span>
+        <span id="status-ollama" style="font-size:11px;color:var(--text-muted)">Yükleniyor...</span>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted)">
+        <span id="status-signal-count">—</span> sinyal kayıtlı
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="page-header">
+      <h1 class="page-title">{% block page_title %}{% endblock %}</h1>
+      {% block page_header_actions %}{% endblock %}
+      <span class="page-subtitle" id="last-updated"></span>
+    </div>
+
+    <div class="page-body">
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</div>
+
+<div id="toast-container" class="toast-container"></div>
+
+<script src="/static/js/app.js"></script>
+{% block extra_js %}{% endblock %}
+
+<script>
+// Update last updated time and review badge
+async function updateHeaderInfo() {
+  try {
+    const stats = await API.get('/api/signals/stats/summary');
+    const badge = document.getElementById('review-badge');
+    if (badge && stats.needs_review > 0) {
+      badge.textContent = stats.needs_review;
+    } else if (badge) {
+      badge.style.display = 'none';
+    }
+    const lu = document.getElementById('last-updated');
+    if (lu) {
+      const now = new Date();
+      lu.textContent = `Son güncelleme: ${now.toLocaleTimeString('tr-TR', {hour:'2-digit',minute:'2-digit'})}`;
+    }
+  } catch(_) {}
+}
+updateHeaderInfo();
+</script>
+</body>
+</html>

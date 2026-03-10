@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}Ayarlar — OpenSignal Radar TR{% endblock %}
+{% block page_title %}Sistem Ayarları{% endblock %}
+
+{% block content %}
+<!-- System Status -->
+<div class="grid-2" style="margin-bottom:24px;gap:20px">
+  <div class="card">
+    <div class="card-header"><span class="heading-md">Sistem Durumu</span></div>
+    <div id="system-status-content">
+      <div style="display:flex;justify-content:center;padding:20px"><div class="spinner"></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><span class="heading-md">Hızlı İşlemler</span></div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-subtle)">
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--text-primary)">Tam Pipeline Çalıştır</div>
+          <div style="font-size:12px;color:var(--text-muted)">Tüm kaynak topla + sinyal işle</div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="runPipeline()">Çalıştır</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-subtle)">
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--text-primary)">Sadece Sinyal İşle</div>
+          <div style="font-size:12px;color:var(--text-muted)">Bekleyen makaleleri işle</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="runProcessing()">Çalıştır</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-subtle)">
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--text-primary)">Trend Analizi Yenile</div>
+          <div style="font-size:12px;color:var(--text-muted)">Kümeleme algoritmalarını çalıştır</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="runTrends()">Çalıştır</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0">
+        <div>
+          <div style="font-size:13px;font-weight:500;color:var(--text-primary)">Ollama Cache Sıfırla</div>
+          <div style="font-size:12px;color:var(--text-muted)">AI bağlantısını yeniden test et</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="resetOllama()">Sıfırla</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Scheduler Jobs -->
+<div class="card" style="margin-bottom:24px">
+  <div class="card-header">
+    <span class="heading-md">Zamanlanmış Görevler</span>
+    <span id="scheduler-status" class="tag"></span>
+  </div>
+  <div id="scheduler-jobs"></div>
+</div>
+
+<!-- Recent Logs -->
+<div class="card">
+  <div class="card-header">
+    <span class="heading-md">Sistem Logları</span>
+    <button class="btn btn-ghost btn-sm" onclick="loadLogs()">Yenile</button>
+  </div>
+  <div id="system-logs">
+    <div style="display:flex;justify-content:center;padding:20px"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- About -->
+<div class="card" style="margin-top:24px">
+  <div class="card-header"><span class="heading-md">Hakkında</span></div>
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-subtle)">
+      <span style="font-size:13px;color:var(--text-secondary)">Uygulama</span>
+      <span style="font-size:13px;color:var(--text-primary)">OpenSignal Radar TR v1.0.0</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border-subtle)">
+      <span style="font-size:13px;color:var(--text-secondary)">Lisans</span>
+      <span style="font-size:13px;color:var(--text-primary)">MIT</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:8px 0">
+      <span style="font-size:13px;color:var(--text-secondary)">Teknoloji</span>
+      <span style="font-size:13px;color:var(--text-primary)">Python · FastAPI · SQLite · feedparser · trafilatura</span>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function loadSystemStatus() {
+  try {
+    const status = await API.get('/api/system/status');
+
+    // System status
+    document.getElementById('system-status-content').innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:10px">
+        ${statusRow('Durum', '<span class="tag tag-green">Aktif</span>')}
+        ${statusRow('Veritabanı', `${formatNumber(status.database.total_articles)} makale, ${formatNumber(status.database.total_signals)} sinyal`)}
+        ${statusRow('İşlem Bekleyen', formatNumber(status.database.pending_processing) + ' makale')}
+        ${statusRow('AI Modu', status.ollama.enabled
+          ? `<span class="tag tag-green">Ollama: ${escHtml(status.ollama.model || '')}</span>`
+          : '<span class="tag">Kural Tabanlı Mod</span>')}
+        ${statusRow('Son Veri Toplama', escHtml(status.last_ingestion.summary || 'Henüz çalışmadı'))}
+        ${statusRow('Sunucu Zamanı', new Date(status.server_time).toLocaleString('tr-TR'))}
+      </div>`;
+
+    // Scheduler
+    const schedulerEl = document.getElementById('scheduler-status');
+    if (schedulerEl) {
+      schedulerEl.textContent = status.scheduler.running ? 'Çalışıyor' : 'Durduruldu';
+      schedulerEl.className = `tag ${status.scheduler.running ? 'tag-green' : 'tag-red'}`;
+    }
+
+    const jobsEl = document.getElementById('scheduler-jobs');
+    if (jobsEl && status.scheduler.jobs.length) {
+      jobsEl.innerHTML = `
+        <div class="table-wrapper" style="border:none">
+          <table>
+            <thead><tr><th>Görev</th><th>ID</th><th>Sonraki Çalışma</th></tr></thead>
+            <tbody>
+              ${status.scheduler.jobs.map(job => `<tr>
+                <td style="font-size:13px;color:var(--text-primary)">${escHtml(job.name)}</td>
+                <td><span class="tag">${escHtml(job.id)}</span></td>
+                <td style="font-size:12px;color:var(--text-secondary)">
+                  ${job.next_run ? new Date(job.next_run).toLocaleString('tr-TR') : '—'}
+                </td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    } else if (jobsEl) {
+      jobsEl.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px 0">Zamanlayıcı aktif değil</div>';
+    }
+  } catch(e) {
+    document.getElementById('system-status-content').innerHTML =
+      `<div style="color:var(--red);font-size:13px">Sistem durumu alınamadı</div>`;
+  }
+}
+
+function statusRow(label, value) {
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border-subtle)">
+      <span style="font-size:12px;color:var(--text-muted)">${label}</span>
+      <span style="font-size:13px;color:var(--text-primary)">${value}</span>
+    </div>`;
+}
+
+async function loadLogs() {
+  try {
+    const data = await API.get('/api/system/logs', { per_page: 15 });
+    const el = document.getElementById('system-logs');
+    if (!data.items || !data.items.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px 0">Henüz log yok</div>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="table-wrapper" style="border:none">
+        <table>
+          <thead><tr><th>Zaman</th><th>Olay</th><th>Mesaj</th><th>Seviye</th></tr></thead>
+          <tbody>
+            ${data.items.map(log => `<tr>
+              <td style="font-size:12px;color:var(--text-muted);white-space:nowrap">
+                ${new Date(log.created_at).toLocaleString('tr-TR')}
+              </td>
+              <td><span class="tag" style="font-size:10px">${escHtml(log.event_type)}</span></td>
+              <td style="font-size:12px;color:var(--text-secondary);max-width:350px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                ${escHtml(log.message)}
+              </td>
+              <td>
+                <span class="tag ${log.level === 'ERROR' ? 'tag-red' : log.level === 'WARNING' ? 'tag-amber' : ''}" style="font-size:10px">
+                  ${log.level}
+                </span>
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } catch(e) {}
+}
+
+async function runPipeline() {
+  try {
+    await API.post('/api/system/run-ingestion');
+    Toast.success('Tam pipeline başlatıldı');
+  } catch(e) { Toast.error('Başlatılamadı'); }
+}
+
+async function runProcessing() {
+  try {
+    await API.post('/api/system/run-processing');
+    Toast.success('Sinyal işleme başlatıldı');
+  } catch(e) { Toast.error('Başlatılamadı'); }
+}
+
+async function runTrends() {
+  try {
+    await API.post('/api/trends/analyze');
+    Toast.success('Trend analizi başlatıldı');
+  } catch(e) { Toast.error('Başlatılamadı'); }
+}
+
+async function resetOllama() {
+  try {
+    await API.delete('/api/system/reset-ollama-cache');
+    Toast.info('Ollama cache sıfırlandı');
+    loadSystemStatus();
+  } catch(e) { Toast.error('Sıfırlanamadı'); }
+}
+
+loadSystemStatus();
+loadLogs();
+</script>
+{% endblock %}

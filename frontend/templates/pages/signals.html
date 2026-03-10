@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Sinyal Akışı — OpenSignal Radar TR{% endblock %}
+{% block page_title %}Sinyal Akışı{% endblock %}
+
+{% block page_header_actions %}
+<div class="flex gap-3 ml-auto items-center">
+  <a href="/api/export/signals/csv?days=7" class="btn btn-ghost btn-sm">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M8 2v8M5 7l3 3 3-3M2 12v1a1 1 0 001 1h10a1 1 0 001-1v-1"/>
+    </svg>
+    CSV İndir
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Filters -->
+<div class="filter-bar">
+  <div class="search-bar" style="flex:1;min-width:200px">
+    <span class="search-icon">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="6.5" cy="6.5" r="4.5"/><path d="M10.5 10.5L14 14"/>
+      </svg>
+    </span>
+    <input type="text" id="search-input" placeholder="Şirket, ülke veya özet ara..." style="width:100%">
+  </div>
+
+  <select id="filter-type">
+    <option value="">Tüm Sinyal Tipleri</option>
+    <option value="new_facility">Yeni Tesis</option>
+    <option value="expansion">Kapasite Artışı</option>
+    <option value="investment">Yatırım</option>
+    <option value="incentive">Teşvik</option>
+    <option value="hiring_wave">İşe Alım Dalgası</option>
+    <option value="energy_project">Enerji Projesi</option>
+    <option value="data_center">Veri Merkezi</option>
+    <option value="semiconductor">Yarı İletken</option>
+    <option value="automotive">Otomotiv</option>
+    <option value="partnership">Stratejik Ortaklık</option>
+    <option value="acquisition">Satın Alma</option>
+    <option value="supply_chain_signal">Tedarik Zinciri</option>
+    <option value="mining">Madencilik</option>
+    <option value="defense">Savunma</option>
+    <option value="logistics">Lojistik</option>
+  </select>
+
+  <select id="filter-industry">
+    <option value="">Tüm Sektörler</option>
+    <option value="enerji">Enerji</option>
+    <option value="veri_merkezi">Veri Merkezi</option>
+    <option value="yari_iletken">Yarı İletken</option>
+    <option value="otomotiv">Otomotiv</option>
+    <option value="lojistik">Lojistik</option>
+    <option value="madencilik">Madencilik</option>
+    <option value="uretim">Üretim</option>
+    <option value="savunma">Savunma</option>
+    <option value="teknoloji">Teknoloji</option>
+  </select>
+
+  <select id="filter-status">
+    <option value="">Tüm Durumlar</option>
+    <option value="approved">Onaylandı</option>
+    <option value="pending">Bekliyor</option>
+    <option value="needs_review">İnceleme Gerekli</option>
+  </select>
+
+  <select id="filter-min-score">
+    <option value="">Min. Skor</option>
+    <option value="0.3">≥ 0.30</option>
+    <option value="0.5">≥ 0.50</option>
+    <option value="0.7">≥ 0.70</option>
+  </select>
+</div>
+
+<!-- Results header -->
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+  <span id="result-count" style="font-size:13px;color:var(--text-muted)">Yükleniyor...</span>
+  <div style="display:flex;gap:8px">
+    <button class="btn-icon" id="view-grid" title="Grid Görünümü" onclick="setView('grid')" style="background:var(--bg-elevated)">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="1.5" y="1.5" width="5" height="5" rx="1"/>
+        <rect x="9.5" y="1.5" width="5" height="5" rx="1"/>
+        <rect x="1.5" y="9.5" width="5" height="5" rx="1"/>
+        <rect x="9.5" y="9.5" width="5" height="5" rx="1"/>
+      </svg>
+    </button>
+    <button class="btn-icon" id="view-list" title="Liste Görünümü" onclick="setView('list')">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M2 4h12M2 8h12M2 12h12"/>
+      </svg>
+    </button>
+  </div>
+</div>
+
+<!-- Signal List -->
+<div id="signals-container"></div>
+<div id="pagination-container"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentPage = 1;
+let currentView = 'grid';
+let currentFilters = {};
+
+function setView(view) {
+  currentView = view;
+  document.getElementById('view-grid').style.background = view === 'grid' ? 'var(--accent-muted)' : '';
+  document.getElementById('view-list').style.background = view === 'list' ? 'var(--accent-muted)' : '';
+  loadSignals(currentPage);
+}
+
+async function loadSignals(page = 1) {
+  currentPage = page;
+  const container = document.getElementById('signals-container');
+  container.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px">' +
+    Array(6).fill('<div class="signal-card skeleton" style="height:180px"></div>').join('') + '</div>';
+
+  const params = {
+    page,
+    per_page: 24,
+    include_duplicates: false,
+    signal_type: document.getElementById('filter-type').value,
+    industry: document.getElementById('filter-industry').value,
+    review_status: document.getElementById('filter-status').value,
+    min_confidence: document.getElementById('filter-min-score').value,
+    search: document.getElementById('search-input').value,
+  };
+
+  try {
+    const data = await API.get('/api/signals/', params);
+
+    document.getElementById('result-count').textContent =
+      `${formatNumber(data.total)} sinyal bulundu`;
+
+    if (!data.items || !data.items.length) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">
+            <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M24 6a18 18 0 100 36A18 18 0 0024 6z"/>
+              <circle cx="24" cy="24" r="4"/>
+              <path d="M24 14v2M24 32v2M14 24h2M32 24h2"/>
+            </svg>
+          </div>
+          <h3>Sinyal bulunamadı</h3>
+          <p>Filtreleri değiştirin veya veri toplama başlatın.</p>
+        </div>`;
+      document.getElementById('pagination-container').innerHTML = '';
+      return;
+    }
+
+    if (currentView === 'grid') {
+      container.innerHTML = `<div class="grid-signals">${data.items.map(buildSignalCard).join('')}</div>`;
+    } else {
+      container.innerHTML = buildListView(data.items);
+    }
+
+    document.getElementById('pagination-container').innerHTML =
+      buildPagination(data.page, data.pages, (p) => loadSignals(p));
+
+  } catch(e) {
+    container.innerHTML = `<div style="color:var(--red);padding:20px">Yüklenemedi: ${e.message}</div>`;
+  }
+}
+
+function buildListView(items) {
+  return `
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Sinyal Tipi</th>
+            <th>Başlık / Özet</th>
+            <th>Şirket</th>
+            <th>Ülke</th>
+            <th>Sektör</th>
+            <th>Güven</th>
+            <th>Etki</th>
+            <th>Tarih</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items.map(sig => `
+            <tr onclick="window.location='/sinyaller/${sig.id}'" style="cursor:pointer">
+              <td>${buildSignalBadge(sig.signal_type)}</td>
+              <td style="max-width:300px">
+                <div style="font-size:13px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                  ${escHtml(sig.article_title || sig.summary_tr || '—')}
+                </div>
+              </td>
+              <td style="color:var(--text-secondary);font-size:12px">${escHtml(sig.detected_company || '—')}</td>
+              <td style="font-size:12px;color:var(--text-secondary)">${escHtml(sig.country || '—')}</td>
+              <td style="font-size:12px;color:var(--text-secondary)">${Industries.label(sig.industry)}</td>
+              <td>${buildScoreBadge(sig.confidence_score)}</td>
+              <td>${buildScoreBadge(sig.impact_score)}</td>
+              <td style="font-size:12px;color:var(--text-muted);white-space:nowrap">${formatDate(sig.created_at)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+// Debounced search
+const debouncedSearch = debounce(() => loadSignals(1), 400);
+document.getElementById('search-input').addEventListener('input', debouncedSearch);
+
+// Filter changes
+['filter-type', 'filter-industry', 'filter-status', 'filter-min-score'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => loadSignals(1));
+});
+
+// Init
+loadSignals(1);
+setView('grid');
+</script>
+{% endblock %}
