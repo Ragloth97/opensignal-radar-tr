@@ -2,6 +2,7 @@ services:
   - type: web
     name: opensignal-radar-tr
     runtime: docker
+    rootDir: opensignal-radar-tr
     dockerfilePath: ./Dockerfile
     plan: free
     region: frankfurt
