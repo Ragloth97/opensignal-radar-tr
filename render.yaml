@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: opensignal-radar-tr
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: frankfurt
+    envVars:
+      - key: OLLAMA_ENABLED
+        value: "false"
+      - key: DATABASE_URL
+        value: "sqlite:////data/opensignal.db"
+      - key: HOST
+        value: "0.0.0.0"
+      - key: PORT
+        value: "8000"
+      - key: DEBUG
+        value: "false"
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
