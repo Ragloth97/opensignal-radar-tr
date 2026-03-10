@@ -2,7 +2,11 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0d0f12">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="OSRadar TR">
   <title>{% block title %}OpenSignal Radar TR{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700;800&display=swap" rel="stylesheet">
@@ -121,6 +125,44 @@
     </div>
   </div>
 </div>
+
+<!-- Alt Navigasyon (tablet/mobil) -->
+<nav class="bottom-nav" id="bottom-nav">
+  <a class="bottom-nav-item" href="/">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+      <rect x="1.5" y="1.5" width="5" height="5" rx="1"/>
+      <rect x="9.5" y="1.5" width="5" height="5" rx="1"/>
+      <rect x="1.5" y="9.5" width="5" height="5" rx="1"/>
+      <rect x="9.5" y="9.5" width="5" height="5" rx="1"/>
+    </svg>
+    <span class="bottom-nav-label">Panel</span>
+  </a>
+  <a class="bottom-nav-item" href="/briefing">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M2 3h12M2 6h9M2 9h11M2 12h7"/>
+    </svg>
+    <span class="bottom-nav-label">Briefing</span>
+  </a>
+  <a class="bottom-nav-item" href="/sinyaller">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M1 11l4-5 3 3 3-4 4 5"/>
+    </svg>
+    <span class="bottom-nav-label">Sinyaller</span>
+  </a>
+  <a class="bottom-nav-item" href="/trendler">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M1 12L5 7l3 3 4-5 3 3"/>
+    </svg>
+    <span class="bottom-nav-label">Trendler</span>
+  </a>
+  <a class="bottom-nav-item" href="/inceleme">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z"/>
+      <circle cx="8" cy="8" r="2"/>
+    </svg>
+    <span class="bottom-nav-label">İnceleme</span>
+  </a>
+</nav>
 
 <div id="toast-container" class="toast-container"></div>
 

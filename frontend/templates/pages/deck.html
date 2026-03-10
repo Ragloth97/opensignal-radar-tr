@@ -5,11 +5,18 @@
 {% block page_header_actions %}
 <div class="flex gap-3 ml-auto items-center">
   <span id="briefing-date" style="font-size:12px;color:var(--text-muted)"></span>
-  <a href="/api/export/signals/json?days=7" class="btn btn-ghost btn-sm">
+  <!-- Tablet okuma modu toggle -->
+  <button class="btn btn-ghost btn-sm" id="reading-toggle" onclick="toggleReadingMode()" title="Okuma Modu">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M2 3h5v10H2zM9 3h5v10H9z"/>
+    </svg>
+    <span id="reading-toggle-label">Okuma Modu</span>
+  </button>
+  <a href="/api/export/signals/json?days=7" class="btn btn-ghost btn-sm" style="display:none" id="export-btn">
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
       <path d="M8 2v8M5 7l3 3 3-3M2 12v1a1 1 0 001 1h10a1 1 0 001-1v-1"/>
     </svg>
-    JSON Export
+    Export
   </a>
   <button class="btn btn-ghost btn-sm" onclick="loadDeck()">
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -21,6 +28,15 @@
 {% endblock %}
 
 {% block content %}
+<!-- Tablet okuma modu banner -->
+<div id="reading-banner" style="display:none;background:var(--accent-muted);border:1px solid var(--accent);border-radius:var(--radius-lg);padding:10px 16px;margin-bottom:20px;font-size:13px;color:var(--accent);display:none;align-items:center;gap:8px">
+  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+    <path d="M8 1.5C4.4 1.5 1.5 4.4 1.5 8S4.4 14.5 8 14.5 14.5 11.6 14.5 8 11.6 1.5 8 1.5zm0 3v4l2.5 2.5"/>
+  </svg>
+  Okuma modu aktif — tablette rahatça kaydırarak okuyun
+  <button onclick="toggleReadingMode()" style="margin-left:auto;background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;padding:0">Kapat</button>
+</div>
+
 <div id="deck-root">
   <div style="display:flex;align-items:center;justify-content:center;height:200px">
     <div class="spinner" style="width:24px;height:24px"></div>
@@ -36,7 +52,13 @@ async function loadDeck() {
 
   try {
     const deck = await API.get('/api/deck/briefing');
-    renderDeck(deck);
+    deckData = deck;
+    if (readingMode) {
+      renderReadingMode(deck);
+    } else {
+      renderDeck(deck);
+    }
+    if (window._deckDataLoaded) window._deckDataLoaded(deck);
   } catch(e) {
     root.innerHTML = `<div style="color:var(--red);padding:20px">Briefing yüklenemedi: ${e.message}</div>`;
   }
@@ -296,5 +318,182 @@ function renderRaw(items) {
 }
 
 loadDeck();
+
+// ── Okuma Modu ────────────────────────────────────────────────
+let readingMode = false;
+let deckData = null;
+
+// Tablet'te otomatik okuma modunu aktif et
+function autoDetectTablet() {
+  const w = window.innerWidth;
+  if (w <= 1024 && w > 480) {
+    // Tablet range — okuma modunu varsayılan yap
+    enableReadingMode();
+  }
+}
+
+function toggleReadingMode() {
+  if (readingMode) {
+    disableReadingMode();
+  } else {
+    enableReadingMode();
+  }
+}
+
+function enableReadingMode() {
+  readingMode = true;
+  const banner = document.getElementById('reading-banner');
+  if (banner) banner.style.display = 'flex';
+  const label = document.getElementById('reading-toggle-label');
+  if (label) label.textContent = 'Normal Görünüm';
+  if (deckData) renderReadingMode(deckData);
+  localStorage.setItem('osr_reading_mode', '1');
+}
+
+function disableReadingMode() {
+  readingMode = false;
+  const banner = document.getElementById('reading-banner');
+  if (banner) banner.style.display = 'none';
+  const label = document.getElementById('reading-toggle-label');
+  if (label) label.textContent = 'Okuma Modu';
+  if (deckData) renderDeck(deckData);
+  localStorage.setItem('osr_reading_mode', '0');
+}
+
+function renderReadingMode(deck) {
+  // Tablet için özel bülten formatı
+  const ov = deck.section_1_overview || {};
+  const critical = deck.section_2_critical || [];
+  const watchlist = deck.section_6_watchlist || [];
+  const patterns = deck.section_3_patterns || [];
+
+  const dateEl = document.getElementById('briefing-date');
+  const dateStr = dateEl ? dateEl.textContent : '';
+
+  const root = document.getElementById('deck-root');
+  root.innerHTML = `
+    <div class="tablet-reading-view">
+
+      <!-- Başlık kartı -->
+      <div class="reading-card" style="background:linear-gradient(135deg,var(--bg-elevated),var(--bg-card));border-color:var(--border-default)">
+        <div style="font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px">
+          OpenSignal Radar TR · ${dateStr}
+        </div>
+        <div style="font-size:22px;font-weight:800;color:var(--text-primary);line-height:1.2;margin-bottom:16px">
+          Günlük Ekonomik<br>İstihbarat Bülteni
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+          <div style="text-align:center;padding:12px;background:var(--bg-card);border-radius:var(--radius-md)">
+            <div style="font-size:28px;font-weight:800;color:var(--text-primary)">${formatNumber(ov.week_signal_count || 0)}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Bu Hafta</div>
+          </div>
+          <div style="text-align:center;padding:12px;background:var(--bg-card);border-radius:var(--radius-md)">
+            <div style="font-size:28px;font-weight:800;color:var(--green)">${formatNumber(ov.high_impact_today || 0)}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Yüksek Etkili</div>
+          </div>
+          <div style="text-align:center;padding:12px;background:var(--bg-card);border-radius:var(--radius-md)">
+            <div style="font-size:28px;font-weight:800;color:var(--accent)">${(ov.top_countries || []).length}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Aktif Ülke</div>
+          </div>
+        </div>
+        ${ov.main_theme ? `
+        <div style="margin-top:14px;padding:10px 14px;background:var(--accent-muted);border-radius:var(--radius-md);font-size:13px;color:var(--accent)">
+          ${escHtml(ov.main_theme)}
+        </div>` : ''}
+      </div>
+
+      <!-- Kritik gelişmeler -->
+      ${critical.length ? `
+      <div class="reading-card">
+        <div class="reading-card-label">Kritik Gelişmeler</div>
+        ${critical.slice(0, 8).map((sig, i) => `
+          <a href="/sinyaller/${sig.id}" style="text-decoration:none;display:block">
+            <div class="reading-signal-item">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+                <span style="font-size:11px;font-weight:700;color:var(--text-disabled)">${String(i+1).padStart(2,'0')}</span>
+                ${buildSignalBadge(sig.signal_type)}
+                ${sig.country ? `<span style="font-size:12px;color:var(--text-muted)">${escHtml(sig.country)}</span>` : ''}
+                ${sig.industry ? `<span style="font-size:12px;color:var(--text-muted)">${Industries.label(sig.industry)}</span>` : ''}
+                <span style="margin-left:auto">${buildScoreBadge(sig.composite_score)}</span>
+              </div>
+              <div class="reading-signal-company">
+                ${escHtml(sig.detected_company || sig.article_title || 'Şirket Tespit Edilemedi')}
+              </div>
+              <div class="reading-signal-text">${escHtml(sig.summary_tr || '—')}</div>
+              ${sig.why_important ? `
+              <div style="font-size:13px;color:var(--text-muted);font-style:italic">
+                ${escHtml(sig.why_important)}
+              </div>` : ''}
+              ${sig.evidence_phrases && sig.evidence_phrases.length ? `
+              <div style="margin-top:10px;padding:10px 14px;background:var(--bg-elevated);border-radius:var(--radius-md);font-size:13px;color:var(--text-muted);font-style:italic;border-left:2px solid var(--accent)">
+                "${escHtml(sig.evidence_phrases[0])}"
+              </div>` : ''}
+            </div>
+          </a>`).join('')}
+      </div>` : ''}
+
+      <!-- Trendler -->
+      ${patterns.length ? `
+      <div class="reading-card">
+        <div class="reading-card-label">Gelişen Örüntüler</div>
+        ${patterns.slice(0,4).map(p => `
+          <div style="padding:14px 0;border-bottom:1px solid var(--border-subtle)">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              ${p.sector ? `<span style="font-size:11px;color:var(--accent);font-weight:600">${Industries.label(p.sector)}</span>` : ''}
+              ${p.geography ? `<span style="font-size:11px;color:var(--text-muted)">${escHtml(p.geography)}</span>` : ''}
+              <span style="margin-left:auto;font-size:11px;color:var(--text-muted)">${p.signal_count} sinyal</span>
+            </div>
+            <div style="font-size:15px;font-weight:600;color:var(--text-primary);margin-bottom:6px">${escHtml(p.label)}</div>
+            <div style="font-size:13px;color:var(--text-secondary);line-height:1.65">${escHtml((p.description_tr||'').slice(0,200))}${(p.description_tr||'').length > 200 ? '…' : ''}</div>
+          </div>`).join('')}
+      </div>` : ''}
+
+      <!-- İzleme listesi -->
+      ${watchlist.length ? `
+      <div class="reading-card">
+        <div class="reading-card-label">Yakından İzlenmeli</div>
+        ${watchlist.slice(0,5).map(s => `
+          <a href="/sinyaller/${s.id}" style="text-decoration:none;display:block">
+            <div class="reading-signal-item">
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+                ${buildSignalBadge(s.signal_type)}
+                ${s.country ? `<span style="font-size:12px;color:var(--text-muted)">${escHtml(s.country)}</span>` : ''}
+              </div>
+              <div style="font-size:14px;font-weight:500;color:var(--text-primary);margin-bottom:4px">
+                ${escHtml(s.detected_company || (s.summary_tr||'').slice(0,80) || '—')}
+              </div>
+              <div style="font-size:13px;color:var(--amber)">${escHtml(s.watch_reason||'')}</div>
+            </div>
+          </a>`).join('')}
+      </div>` : ''}
+
+      <!-- Alt boşluk (bottom nav için) -->
+      <div style="height:24px"></div>
+    </div>`;
+}
+
+// Sayfa yüklendiğinde okuma modunu restore et veya tablet'i detect et
+document.addEventListener('DOMContentLoaded', () => {
+  const stored = localStorage.getItem('osr_reading_mode');
+  if (stored === '1') {
+    readingMode = false; // ilk render normal yapılacak, sonra switch
+    // Veri yüklenince switching yapılacak
+  }
+  // Tablet auto detect
+  if (!stored) autoDetectTablet();
+});
+
+// loadDeck tamamlandıktan sonra okuma modunu uygula
+const _origRender = renderDeck;
+window._deckDataLoaded = function(deck) {
+  deckData = deck;
+  if (readingMode) {
+    renderReadingMode(deck);
+  }
+  // stored preference
+  if (localStorage.getItem('osr_reading_mode') === '1' && !readingMode) {
+    enableReadingMode();
+  }
+};
 </script>
 {% endblock %}
