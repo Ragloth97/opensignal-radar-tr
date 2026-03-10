@@ -22,7 +22,7 @@ COPY . .
 RUN mkdir -p /app/data
 
 # Kurulum
-RUN python scripts/setup.py --demo
+RUN python scripts/setup.py
 
 EXPOSE 8000
 
