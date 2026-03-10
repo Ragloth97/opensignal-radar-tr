@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     HIGH_IMPACT_THRESHOLD: float = 0.70
     MIN_SIGNAL_SCORE: float = 0.20  # Bu altı kayıt edilmez
 
+    # Groq (ücretsiz tier — https://console.groq.com)
+    GROQ_API_KEY: Optional[str] = None
+
     # Ollama
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "qwen2.5:7b-instruct"

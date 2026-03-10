@@ -21,9 +21,11 @@ class SignalProcessor:
     AI katmanı varsa devreye alır, yoksa sadece rules kullanır.
     """
 
-    def __init__(self, db: Session, ai_enabled: bool = False):
+    def __init__(self, db: Session, ai_enabled: bool = True):
         self.db = db
-        self.ai_enabled = ai_enabled
+        from backend.ai.enhancer import AIEnhancer
+        self.enhancer = AIEnhancer()
+        self.ai_enabled = self.enhancer.enabled
 
     def process_pending_articles(self, limit: int = 100) -> int:
         """
@@ -110,6 +112,18 @@ class SignalProcessor:
             )
 
             self.db.add(signal)
+            self.db.flush()  # ID ata
+
+            # AI ile zenginleştir (Groq varsa)
+            if self.ai_enabled:
+                article_text = article.cleaned_text or article.raw_text or ""
+                updates = self.enhancer.enhance_signal(
+                    signal, article.title, article_text
+                )
+                for key, val in updates.items():
+                    if hasattr(signal, key):
+                        setattr(signal, key, val)
+
             saved += 1
 
         return saved

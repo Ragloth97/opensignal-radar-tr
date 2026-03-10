@@ -121,6 +121,16 @@ class RulesBasedDetector:
             # Kanıt cümleleri
             evidence = self._extract_evidence(text, matched_patterns)
 
+            # Yatırım miktarı (özet için)
+            amount_match = INVESTMENT_AMOUNT_PATTERN.search(text)
+            amount_str = None
+            if amount_match:
+                currency = amount_match.group(1)
+                value = amount_match.group(2)
+                unit = amount_match.group(3).lower()
+                unit_tr = {"billion": "milyar", "trillion": "trilyon", "million": "milyon"}.get(unit, unit)
+                amount_str = f"{currency}{value} {unit_tr}"
+
             # Etki skoru
             impact = self._calculate_impact(
                 text_lower, signal_type, confidence,
@@ -147,11 +157,12 @@ class RulesBasedDetector:
                 "impact_score": round(impact, 3),
                 "relevance_score": round(confidence * 0.6 + impact * 0.4, 3),
                 "composite_score": round(composite, 3),
-                "evidence_phrases": evidence[:5],  # Max 5 kanıt
+                "evidence_phrases": evidence[:5],
                 "keywords_matched": matched_patterns[:8],
                 "relevant_sectors": relevant_sectors,
                 "summary_tr": self._generate_summary_tr(
-                    article.title, signal_type, company, country, industry
+                    article.title, signal_type, company, country, industry,
+                    evidence=evidence[:2], amount=amount_str,
                 ),
                 "review_status": review_status,
                 "detection_method": "rules",
@@ -337,42 +348,49 @@ class RulesBasedDetector:
         company: Optional[str],
         country: Optional[str],
         industry: Optional[str],
+        evidence: Optional[List[str]] = None,
+        amount: Optional[str] = None,
     ) -> str:
-        """Basit kural tabanlı Türkçe özet üret."""
-        signal_label = SIGNAL_TYPE_LABELS_TR.get(signal_type, "Sinyal")
-        parts = []
-
-        if company:
-            parts.append(company)
-        if country:
-            parts.append(f"({country})")
-
+        """Kural tabanlı Türkçe özet — AI yokken devreye girer."""
         action_map = {
-            SignalType.NEW_FACILITY: "yeni tesis yatırımı tespit edildi",
-            SignalType.EXPANSION: "kapasite artışı sinyali alındı",
-            SignalType.INVESTMENT: "yatırım kararı açıklandı",
-            SignalType.INCENTIVE: "yatırım teşviği haberi",
-            SignalType.HIRING_WAVE: "büyük çaplı işe alım sinyali",
-            SignalType.INFRASTRUCTURE: "altyapı projesi başlatıldı",
-            SignalType.ENERGY_PROJECT: "enerji projesi duyuruldu",
-            SignalType.PATENT: "patent / teknoloji gelişmesi",
-            SignalType.PARTNERSHIP: "stratejik ortaklık kuruldu",
-            SignalType.ACQUISITION: "satın alma / birleşme hareketi",
-            SignalType.SUPPLY_CHAIN: "tedarik zinciri genişlemesi",
-            SignalType.DATA_CENTER: "veri merkezi yatırımı",
-            SignalType.MINING: "madencilik projesi genişliyor",
-            SignalType.SEMICONDUCTOR: "yarı iletken üretim yatırımı",
-            SignalType.AUTOMOTIVE: "otomotiv üretim yatırımı",
-            SignalType.DEFENSE: "savunma sanayi gelişmesi",
-            SignalType.LOGISTICS: "lojistik altyapı genişlemesi",
+            SignalType.NEW_FACILITY: "yeni tesis kuruyor",
+            SignalType.EXPANSION: "kapasitesini artırıyor",
+            SignalType.INVESTMENT: "yatırım kararı açıkladı",
+            SignalType.INCENTIVE: "yatırım teşviği aldı",
+            SignalType.HIRING_WAVE: "büyük çaplı işe alım başlatıyor",
+            SignalType.INFRASTRUCTURE: "altyapı projesi başlattı",
+            SignalType.ENERGY_PROJECT: "enerji projesi duyurdu",
+            SignalType.PATENT: "yeni patent / teknoloji geliştirdi",
+            SignalType.PARTNERSHIP: "stratejik ortaklık kurdu",
+            SignalType.ACQUISITION: "satın alma / birleşme gerçekleştirdi",
+            SignalType.SUPPLY_CHAIN: "tedarik zincirini genişletiyor",
+            SignalType.DATA_CENTER: "veri merkezi yatırımı yapıyor",
+            SignalType.MINING: "madencilik projesini genişletiyor",
+            SignalType.SEMICONDUCTOR: "yarı iletken üretim yatırımı yapıyor",
+            SignalType.AUTOMOTIVE: "otomotiv üretim yatırımı yapıyor",
+            SignalType.DEFENSE: "savunma sanayinde gelişme kaydetti",
+            SignalType.LOGISTICS: "lojistik altyapısını genişletiyor",
         }
+        action = action_map.get(signal_type, "stratejik adım attı")
 
-        action = action_map.get(signal_type, "stratejik gelişme")
-        parts.append(action)
+        # Özne: şirket varsa kullan, yoksa sektör/ülke
+        subject = company or (f"{industry} sektörü" if industry else None) or "Bir şirket"
 
-        if title and len(title) < 200:
-            summary = " ".join(parts) + f". Kaynak başlığı: {title}"
-        else:
-            summary = " ".join(parts)
+        # Lokasyon
+        location_str = f", {country}" if country else ""
 
-        return summary[:500]
+        # Yatırım miktarı
+        amount_str = f" ({amount})" if amount else ""
+
+        # Ana cümle
+        sentence = f"{subject}{location_str} {action}{amount_str}."
+
+        # Eğer kanıt cümlesi varsa kısa bir ek ekle
+        if evidence:
+            best = evidence[0]
+            # 150 karakterden uzunsa kırp
+            if len(best) > 150:
+                best = best[:147] + "..."
+            return f"{sentence} {best}"
+
+        return sentence[:500]
